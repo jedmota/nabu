@@ -65,7 +65,7 @@ func NewLayout(requestsPanel *RequestsPanel, detailPanel *DetailPanel) *Layout {
 func (l *Layout) setupNormalLayout() {
 	l.grid.Clear()
 	l.grid.SetRows(1, 0, 1)   // Filter bar, main content, status bar
-	l.grid.SetColumns(-1, -1) // Two equal columns
+	l.grid.SetColumns(-11, -9) // 55% requests, 45% detail
 
 	l.grid.AddItem(l.filterBar, 0, 0, 1, 2, 0, 0, false)
 	l.grid.AddItem(l.requestsPanel, 1, 0, 1, 1, 0, 0, true)

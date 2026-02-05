@@ -10,6 +10,15 @@ import (
 	"proxy-tui/internal/viewmodel"
 )
 
+// Column width constants (fixed columns - must be fully visible)
+const (
+	colTimeWidth   = 12 // HH:MM:SS.mmm
+	colMethodWidth = 7  // DELETE/TUNNEL is longest
+	colHostWidth   = 25 // reasonable host width
+	colStatusWidth = 5  // 3 digits or ERR
+	colDurWidth    = 7  // e.g., "123ms" or "1.23s"
+)
+
 // RequestsPanel shows the list of HTTP requests
 type RequestsPanel struct {
 	*tview.Table
@@ -65,14 +74,19 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 // setHeader sets up the table header
 func (rp *RequestsPanel) setHeader() {
 	headers := []string{"Time", "Method", "Host", "Path", "Status", "Dur"}
-	widths := []int{12, 8, 30, 40, 8, 10}
+	// All columns have fixed width except Path (index 3) which expands
+	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth}
 
 	for i, header := range headers {
 		cell := tview.NewTableCell(header).
 			SetTextColor(tcell.ColorYellow).
 			SetAlign(tview.AlignLeft).
-			SetSelectable(false).
-			SetMaxWidth(widths[i])
+			SetSelectable(false)
+		if widths[i] > 0 {
+			cell.SetMaxWidth(widths[i])
+		} else {
+			cell.SetExpansion(1) // Path column expands
+		}
 		rp.SetCell(0, i, cell)
 	}
 }
@@ -152,13 +166,13 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
 		path = "(encrypted)"
 	}
 
-	// Timestamp column (HH:MM:SS.mmm)
+	// Timestamp column (HH:MM:SS.mmm) - fixed width
 	timestamp := flow.StartTime.Format("15:04:05.000")
 	rp.SetCell(row, 0, tview.NewTableCell(timestamp).
 		SetTextColor(tcell.ColorGray).
-		SetMaxWidth(12))
+		SetMaxWidth(colTimeWidth))
 
-	// Method column - color by method
+	// Method column - fixed width
 	methodColor := tcell.ColorWhite
 	if flow.Tunneled {
 		methodColor = tcell.ColorDarkGray
@@ -178,27 +192,38 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
 	}
 	rp.SetCell(row, 1, tview.NewTableCell(method).
 		SetTextColor(methodColor).
-		SetMaxWidth(8))
+		SetMaxWidth(colMethodWidth))
 
-	// Host column
+	// Host column - fixed width
 	hostColor := tcell.ColorWhite
 	if flow.Tunneled {
 		hostColor = tcell.ColorDarkGray
 	}
 	rp.SetCell(row, 2, tview.NewTableCell(host).
 		SetTextColor(hostColor).
-		SetMaxWidth(30))
+		SetMaxWidth(colHostWidth))
 
-	// Path column
+	// Path column - expands to fill remaining space
+	// Calculate available width for path dynamically
+	_, _, width, _ := rp.GetInnerRect()
+	if width == 0 {
+		width = 100 // default fallback before first render
+	}
+	// Only subtract the actual fixed column widths (no gaps - tview handles spacing)
+	fixedWidth := colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth
+	pathMaxWidth := width - fixedWidth
+	if pathMaxWidth < 10 {
+		pathMaxWidth = 10
+	}
 	pathColor := tcell.ColorGray
 	if flow.Tunneled {
 		pathColor = tcell.ColorDarkGray
 	}
-	rp.SetCell(row, 3, tview.NewTableCell(truncate(path, 40)).
+	rp.SetCell(row, 3, tview.NewTableCell(truncate(path, pathMaxWidth)).
 		SetTextColor(pathColor).
-		SetMaxWidth(40))
+		SetExpansion(1))
 
-	// Status column - color by status code
+	// Status column - fixed width
 	statusColor := tcell.ColorWhite
 	if flow.Tunneled {
 		statusColor = tcell.ColorDarkGray
@@ -218,16 +243,16 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
 	}
 	rp.SetCell(row, 4, tview.NewTableCell(status).
 		SetTextColor(statusColor).
-		SetMaxWidth(8))
+		SetMaxWidth(colStatusWidth))
 
-	// Duration column
+	// Duration column - fixed width
 	durationColor := tcell.ColorGray
 	if flow.Tunneled {
 		durationColor = tcell.ColorDarkGray
 	}
 	rp.SetCell(row, 5, tview.NewTableCell(duration).
 		SetTextColor(durationColor).
-		SetMaxWidth(10))
+		SetMaxWidth(colDurWidth))
 }
 
 // MoveUp moves selection up
