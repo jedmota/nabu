@@ -11,14 +11,20 @@ type FilterType int
 const (
 	FilterAll FilterType = iota
 	FilterWhitelist
-	FilterBlacklist
+	FilterCustom
 )
+
+// HostPattern represents a whitelist pattern with enabled state
+type HostPattern struct {
+	Pattern string
+	Enabled bool
+}
 
 // FilterState holds the current filter configuration
 type FilterState struct {
 	Type         FilterType
 	SearchQuery  string
-	HostPatterns []string
+	HostPatterns []HostPattern
 	Methods      []string
 	StatusCodes  []int
 }
@@ -27,7 +33,7 @@ type FilterState struct {
 func NewFilterState() *FilterState {
 	return &FilterState{
 		Type:         FilterAll,
-		HostPatterns: []string{},
+		HostPatterns: []HostPattern{},
 		Methods:      []string{},
 		StatusCodes:  []int{},
 	}
@@ -49,20 +55,27 @@ func (f *FilterState) Match(flow *Flow) bool {
 		}
 	}
 
-	// Check host patterns
+	// Check host patterns (only enabled ones)
 	if len(f.HostPatterns) > 0 {
+		hasEnabled := false
 		matched := false
-		for _, pattern := range f.HostPatterns {
-			if matchPattern(flow.Request.Host, pattern) {
+		for _, hp := range f.HostPatterns {
+			if !hp.Enabled {
+				continue
+			}
+			hasEnabled = true
+			if matchPattern(flow.Request.Host, hp.Pattern) {
 				matched = true
 				break
 			}
 		}
-		if f.Type == FilterWhitelist && !matched {
-			return false
-		}
-		if f.Type == FilterBlacklist && matched {
-			return false
+		if hasEnabled {
+			if f.Type == FilterWhitelist && !matched {
+				return false
+			}
+			if f.Type == FilterCustom && !matched {
+				return false
+			}
 		}
 	}
 
@@ -99,14 +112,31 @@ func (f *FilterState) Match(flow *Flow) bool {
 
 // matchPattern checks if host matches a glob-like pattern
 func matchPattern(host, pattern string) bool {
+	host = strings.ToLower(host)
+	pattern = strings.ToLower(pattern)
+
+	// Exact match
+	if host == pattern {
+		return true
+	}
+
 	// Simple glob matching with * wildcard
 	if pattern == "*" {
 		return true
 	}
+
+	// *.example.com matches example.com and sub.example.com
 	if strings.HasPrefix(pattern, "*.") {
-		suffix := pattern[1:] // Remove the *
-		return strings.HasSuffix(host, suffix) || host == pattern[2:]
+		suffix := pattern[1:] // ".example.com"
+		domain := pattern[2:] // "example.com"
+		return host == domain || strings.HasSuffix(host, suffix)
 	}
+
+	// General glob pattern with * (e.g., *json.com, api.*, *google*)
+	if strings.Contains(pattern, "*") {
+		return matchGlob(host, pattern)
+	}
+
 	// Try regex if it looks like one
 	if strings.ContainsAny(pattern, "^$()[]{}|+?\\") {
 		re, err := regexp.Compile(pattern)
@@ -114,5 +144,29 @@ func matchPattern(host, pattern string) bool {
 			return re.MatchString(host)
 		}
 	}
-	return host == pattern
+
+	return false
+}
+
+// matchGlob matches a string against a glob pattern with * wildcards
+func matchGlob(s, pattern string) bool {
+	// Convert glob to regex: escape special chars, replace * with .*
+	regexPattern := "^"
+	for _, c := range pattern {
+		switch c {
+		case '*':
+			regexPattern += ".*"
+		case '.', '+', '?', '(', ')', '[', ']', '{', '}', '^', '$', '|', '\\':
+			regexPattern += "\\" + string(c)
+		default:
+			regexPattern += string(c)
+		}
+	}
+	regexPattern += "$"
+
+	re, err := regexp.Compile(regexPattern)
+	if err != nil {
+		return false
+	}
+	return re.MatchString(s)
 }

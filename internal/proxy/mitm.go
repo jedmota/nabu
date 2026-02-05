@@ -82,12 +82,68 @@ func (f *TLSConfigFactory) GetConfigForHost(host string) (*tls.Config, error) {
 	return config, nil
 }
 
-// SetupMITM configures the proxy for MITM on HTTPS connections
+// SetupMITM configures the proxy for MITM on HTTPS connections (always MITM)
 func SetupMITM(proxy *goproxy.ProxyHttpServer, config *MITMConfig) {
 	factory := NewTLSConfigFactory(config.CA)
 
 	// Configure HTTPS handling - always MITM
 	proxy.OnRequest().HandleConnect(goproxy.AlwaysMitm)
+
+	// Set up TLS config for MITM
+	goproxy.MitmConnect.TLSConfig = func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error) {
+		// Extract hostname without port
+		hostname := host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			hostname = h
+		}
+		return factory.GetConfigForHost(hostname)
+	}
+
+	// Configure the CA certificate for goproxy
+	keyPath := ca.GetCADir() + "/ca.key"
+	keyPEM, err := os.ReadFile(keyPath)
+	if err == nil {
+		if caCert, err := tls.X509KeyPair(config.CA.CertPEM(), keyPEM); err == nil {
+			goproxy.GoproxyCa = caCert
+		}
+	}
+}
+
+// TunnelCallback is called when a tunnel connection is established
+type TunnelCallback func(host string, isMITM bool)
+
+// SetupConditionalMITM configures the proxy for MITM only on hosts in the SSL proxy list
+func SetupConditionalMITM(proxy *goproxy.ProxyHttpServer, config *MITMConfig, sslProxyList *SSLProxyList) {
+	SetupConditionalMITMWithCallback(proxy, config, sslProxyList, nil)
+}
+
+// SetupConditionalMITMWithCallback configures conditional MITM with a callback for tunnel events
+func SetupConditionalMITMWithCallback(proxy *goproxy.ProxyHttpServer, config *MITMConfig, sslProxyList *SSLProxyList, onTunnel TunnelCallback) {
+	factory := NewTLSConfigFactory(config.CA)
+
+	// Configure HTTPS handling - conditionally MITM based on SSL proxy list
+	proxy.OnRequest().HandleConnectFunc(func(host string, ctx *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		// Extract hostname without port
+		hostname := host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			hostname = h
+		}
+
+		// Check if host is in SSL proxy list
+		if sslProxyList.Match(hostname) {
+			// MITM this connection
+			if onTunnel != nil {
+				onTunnel(host, true)
+			}
+			return goproxy.MitmConnect, host
+		}
+
+		// Passthrough - tunnel without MITM
+		if onTunnel != nil {
+			onTunnel(host, false)
+		}
+		return goproxy.OkConnect, host
+	})
 
 	// Set up TLS config for MITM
 	goproxy.MitmConnect.TLSConfig = func(host string, ctx *goproxy.ProxyCtx) (*tls.Config, error) {

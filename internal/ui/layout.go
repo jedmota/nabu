@@ -2,6 +2,8 @@ package ui
 
 import (
 	"github.com/rivo/tview"
+
+	"proxy-tui/internal/model"
 )
 
 // Layout manages the UI layout
@@ -9,9 +11,14 @@ type Layout struct {
 	grid          *tview.Grid
 	requestsPanel *RequestsPanel
 	detailPanel   *DetailPanel
+	filterBar     *tview.TextView
 	statusBar     *tview.TextView
+	addressBar    *tview.TextView
+	statusFlex    *tview.Flex
 	expanded      bool
-	focusedPanel  int // 0 = requests, 1 = detail
+	focusedPanel  int              // 0 = requests, 1 = detail
+	activeFilter  model.FilterType // current active filter
+	customPattern string           // custom filter pattern
 }
 
 // NewLayout creates a new layout
@@ -20,16 +27,36 @@ func NewLayout(requestsPanel *RequestsPanel, detailPanel *DetailPanel) *Layout {
 		requestsPanel: requestsPanel,
 		detailPanel:   detailPanel,
 		focusedPanel:  0,
+		activeFilter:  model.FilterAll,
 	}
 
-	// Create status bar
+	// Create filter bar at the top
+	l.filterBar = tview.NewTextView()
+	l.filterBar.SetDynamicColors(true)
+	l.filterBar.SetTextAlign(tview.AlignCenter)
+	l.updateFilterBar()
+
+	// Create status bar (left side)
 	l.statusBar = tview.NewTextView()
 	l.statusBar.SetDynamicColors(true)
-	l.statusBar.SetText(" [yellow]Proxy TUI[-] | [green]Tab[-]: switch panel | [green]?[-]: help | [green]q[-]: quit")
+	l.statusBar.SetText(" [cyan]Requests[-] [gray]|[-] [green]l[-]:local [green]L[-]:local mgr [green]r[-]:remote [green]R[-]:remote mgr [green]w[-]:whitelist [green]c[-]:clear [green]?[-]:help")
+
+	// Create address bar (right side)
+	l.addressBar = tview.NewTextView()
+	l.addressBar.SetDynamicColors(true)
+	l.addressBar.SetTextAlign(tview.AlignRight)
+
+	// Create flex container for status bar
+	l.statusFlex = tview.NewFlex().
+		AddItem(l.statusBar, 0, 1, false).
+		AddItem(l.addressBar, 25, 0, false)
 
 	// Create grid layout
 	l.grid = tview.NewGrid()
 	l.setupNormalLayout()
+
+	// Set initial panel border colors
+	l.updatePanelBorders()
 
 	return l
 }
@@ -37,12 +64,13 @@ func NewLayout(requestsPanel *RequestsPanel, detailPanel *DetailPanel) *Layout {
 // setupNormalLayout sets up the default two-panel layout
 func (l *Layout) setupNormalLayout() {
 	l.grid.Clear()
-	l.grid.SetRows(0, 1)    // Main content, status bar
+	l.grid.SetRows(1, 0, 1)   // Filter bar, main content, status bar
 	l.grid.SetColumns(-1, -1) // Two equal columns
 
-	l.grid.AddItem(l.requestsPanel, 0, 0, 1, 1, 0, 0, true)
-	l.grid.AddItem(l.detailPanel, 0, 1, 1, 1, 0, 0, false)
-	l.grid.AddItem(l.statusBar, 1, 0, 1, 2, 0, 0, false)
+	l.grid.AddItem(l.filterBar, 0, 0, 1, 2, 0, 0, false)
+	l.grid.AddItem(l.requestsPanel, 1, 0, 1, 1, 0, 0, true)
+	l.grid.AddItem(l.detailPanel, 1, 1, 1, 1, 0, 0, false)
+	l.grid.AddItem(l.statusFlex, 2, 0, 1, 2, 0, 0, false)
 
 	l.expanded = false
 }
@@ -50,15 +78,16 @@ func (l *Layout) setupNormalLayout() {
 // setupExpandedLayout sets up a single-panel expanded layout
 func (l *Layout) setupExpandedLayout() {
 	l.grid.Clear()
-	l.grid.SetRows(0, 1)    // Main content, status bar
+	l.grid.SetRows(1, 0, 1) // Filter bar, main content, status bar
 	l.grid.SetColumns(0)    // Single column
 
+	l.grid.AddItem(l.filterBar, 0, 0, 1, 1, 0, 0, false)
 	if l.focusedPanel == 0 {
-		l.grid.AddItem(l.requestsPanel, 0, 0, 1, 1, 0, 0, true)
+		l.grid.AddItem(l.requestsPanel, 1, 0, 1, 1, 0, 0, true)
 	} else {
-		l.grid.AddItem(l.detailPanel, 0, 0, 1, 1, 0, 0, true)
+		l.grid.AddItem(l.detailPanel, 1, 0, 1, 1, 0, 0, true)
 	}
-	l.grid.AddItem(l.statusBar, 1, 0, 1, 1, 0, 0, false)
+	l.grid.AddItem(l.statusFlex, 2, 0, 1, 1, 0, 0, false)
 
 	l.expanded = true
 }
@@ -82,6 +111,7 @@ func (l *Layout) ToggleFocus(app *tview.Application) {
 		app.SetFocus(l.detailPanel)
 	}
 
+	l.updatePanelBorders()
 	l.updateStatusBar()
 }
 
@@ -93,7 +123,14 @@ func (l *Layout) SetFocus(panel int, app *tview.Application) {
 	} else {
 		app.SetFocus(l.detailPanel)
 	}
+	l.updatePanelBorders()
 	l.updateStatusBar()
+}
+
+// updatePanelBorders updates panel border colors based on focus
+func (l *Layout) updatePanelBorders() {
+	l.requestsPanel.SetFocused(l.focusedPanel == 0)
+	l.detailPanel.SetFocused(l.focusedPanel == 1)
 }
 
 // GetFocusedPanel returns the currently focused panel index
@@ -101,18 +138,25 @@ func (l *Layout) GetFocusedPanel() int {
 	return l.focusedPanel
 }
 
-// updateStatusBar updates the status bar text
+// updateStatusBar updates the status bar text with context-specific keys
 func (l *Layout) updateStatusBar() {
-	panelName := "Requests"
-	if l.focusedPanel == 1 {
-		panelName = "Detail"
+	if l.focusedPanel == 0 {
+		// Requests panel context
+		l.statusBar.SetText(" [cyan]Requests[-] [gray]|[-] [green]l[-]:local [green]L[-]:local mgr [green]r[-]:remote [green]R[-]:remote mgr [green]w[-]:whitelist [green]c[-]:clear [green]?[-]:help")
+	} else {
+		// Detail panel context
+		l.statusBar.SetText(" [cyan]Detail[-] [gray]|[-] [green]j/k[-]:scroll [green]T[-]:raw [green]l[-]:local [green]r[-]:remote [green]w[-]:whitelist [green]?[-]:help")
 	}
-	l.statusBar.SetText(" [yellow]Proxy TUI[-] | [cyan]" + panelName + "[-] | [green]Tab[-]: switch | [green]?[-]: help | [green]q[-]: quit")
 }
 
 // SetStatus sets a custom status message
 func (l *Layout) SetStatus(msg string) {
 	l.statusBar.SetText(" " + msg)
+}
+
+// SetAddress sets the proxy address displayed on the right
+func (l *Layout) SetAddress(addr string) {
+	l.addressBar.SetText("[gray]" + addr + " [-]")
 }
 
 // Grid returns the root grid
@@ -123,4 +167,39 @@ func (l *Layout) Grid() *tview.Grid {
 // IsExpanded returns whether the layout is expanded
 func (l *Layout) IsExpanded() bool {
 	return l.expanded
+}
+
+// SetFilter sets the active filter and updates the filter bar
+func (l *Layout) SetFilter(filterType model.FilterType) {
+	l.activeFilter = filterType
+	l.updateFilterBar()
+}
+
+// updateFilterBar updates the filter bar to show the active filter
+func (l *Layout) updateFilterBar() {
+	allStyle := "[gray]"
+	whitelistStyle := "[gray]"
+	customStyle := "[gray]"
+
+	switch l.activeFilter {
+	case model.FilterAll:
+		allStyle = "[white:black]"
+	case model.FilterWhitelist:
+		whitelistStyle = "[white:black]"
+	case model.FilterCustom:
+		customStyle = "[white:black]"
+	}
+
+	customText := " /:Custom "
+	if l.customPattern != "" {
+		customText = " /:" + l.customPattern + " "
+	}
+
+	l.filterBar.SetText(allStyle + " 1:All [-] " + whitelistStyle + " 2:Whitelist [-] " + customStyle + customText + "[-]")
+}
+
+// SetCustomPattern sets the custom filter pattern
+func (l *Layout) SetCustomPattern(pattern string) {
+	l.customPattern = pattern
+	l.updateFilterBar()
 }

@@ -1,15 +1,52 @@
 # Binaries
-/proxy-tui
 *.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+proxytui
+proxy-tui
 
-# IDE
+# Archives
+*.tar.gz
+*.zip
+
+# Release artifacts
+release/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Coverage
+*.out
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE/Editor
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+.project
+.settings/
 
-# OS
+# OS files
 .DS_Store
+.DS_Store?
+Thumbs.db
 
-# Go
-vendor/
+# Debug
+debug
+*.log
+
+# Local config (if sensitive)
+.env
+.env.local

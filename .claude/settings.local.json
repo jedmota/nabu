@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:10.55.100.2)",
+      "WebFetch(domain:proxy.jmota.org)",
+      "Bash(go build:*)"
+    ]
+  }
+}
