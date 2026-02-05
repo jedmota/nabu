@@ -20,9 +20,9 @@ func NewWhichKey(keybindings *KeyBindings) *WhichKey {
 	tv := tview.NewTextView()
 	tv.SetDynamicColors(true)
 	tv.SetBorder(true)
-	tv.SetTitle(" Keybindings ")
+	tv.SetTitle(" Keybindings (j/k to scroll, ? to close) ")
 	tv.SetTitleAlign(tview.AlignCenter)
-	tv.SetBackgroundColor(tcell.ColorDarkBlue)
+	tv.SetScrollable(true)
 
 	wk := &WhichKey{
 		TextView:    tv,
@@ -30,6 +30,45 @@ func NewWhichKey(keybindings *KeyBindings) *WhichKey {
 		context:     ContextGlobal,
 		visible:     false,
 	}
+
+	// Add input capture for scrolling
+	tv.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp:
+			row, col := tv.GetScrollOffset()
+			if row > 0 {
+				tv.ScrollTo(row-1, col)
+			}
+			return nil
+		case tcell.KeyDown:
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row+1, col)
+			return nil
+		case tcell.KeyPgUp:
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row-10, col)
+			return nil
+		case tcell.KeyPgDn:
+			row, col := tv.GetScrollOffset()
+			tv.ScrollTo(row+10, col)
+			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'j':
+				row, col := tv.GetScrollOffset()
+				tv.ScrollTo(row+1, col)
+				return nil
+			case 'k':
+				row, col := tv.GetScrollOffset()
+				if row > 0 {
+					tv.ScrollTo(row-1, col)
+				}
+				return nil
+			}
+		}
+		return event
+	})
+
 	wk.updateContent()
 	return wk
 }

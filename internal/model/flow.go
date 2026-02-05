@@ -16,6 +16,7 @@ type Flow struct {
 	StartTime time.Time
 	EndTime   time.Time
 	Error     error
+	Tunneled  bool // True if this was a CONNECT tunnel (no MITM)
 }
 
 // Duration returns the time taken for the flow

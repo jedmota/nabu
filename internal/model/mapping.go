@@ -21,6 +21,8 @@ type MapRule struct {
 	Name        string
 	Pattern     string         // URL pattern to match
 	Replacement string         // Local path or remote URL
+	StatusCode  int            // HTTP status code (default 200)
+	ContentType string         // Content-Type header (auto-detect if empty)
 	compiled    *regexp.Regexp // compiled pattern for regex matching
 }
 
@@ -31,9 +33,108 @@ func NewMapRule(ruleType MapRuleType, pattern, replacement string) *MapRule {
 		Enabled:     true,
 		Pattern:     pattern,
 		Replacement: replacement,
+		StatusCode:  200,
 	}
 	rule.compile()
 	return rule
+}
+
+// NewMapLocalRule creates a new map local rule with all options
+func NewMapLocalRule(pattern, localPath string, statusCode int, contentType string) *MapRule {
+	rule := &MapRule{
+		Type:        MapLocal,
+		Enabled:     true,
+		Pattern:     pattern,
+		Replacement: localPath,
+		StatusCode:  statusCode,
+		ContentType: contentType,
+	}
+	if rule.StatusCode == 0 {
+		rule.StatusCode = 200
+	}
+	rule.compile()
+	return rule
+}
+
+// NewMapRemoteRule creates a new map remote rule
+func NewMapRemoteRule(pattern, remoteURL string) *MapRule {
+	rule := &MapRule{
+		Type:        MapRemote,
+		Enabled:     true,
+		Pattern:     pattern,
+		Replacement: remoteURL,
+	}
+	rule.compile()
+	return rule
+}
+
+// GetStatusCode returns the status code, defaulting to 200
+func (r *MapRule) GetStatusCode() int {
+	if r.StatusCode == 0 {
+		return 200
+	}
+	return r.StatusCode
+}
+
+// GetContentType returns the content type, auto-detecting if not set
+func (r *MapRule) GetContentType() string {
+	if r.ContentType != "" {
+		return r.ContentType
+	}
+	return DetectContentType(r.Replacement)
+}
+
+// DetectContentType detects content type from file extension
+func DetectContentType(path string) string {
+	ext := strings.ToLower(getFileExt(path))
+
+	switch ext {
+	case ".json":
+		return "application/json"
+	case ".js":
+		return "application/javascript"
+	case ".css":
+		return "text/css"
+	case ".html", ".htm":
+		return "text/html"
+	case ".xml":
+		return "application/xml"
+	case ".txt":
+		return "text/plain"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".svg":
+		return "image/svg+xml"
+	case ".ico":
+		return "image/x-icon"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	case ".pdf":
+		return "application/pdf"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+// getFileExt extracts file extension from path
+func getFileExt(path string) string {
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '.' {
+			return path[i:]
+		}
+		if path[i] == '/' || path[i] == '\\' {
+			break
+		}
+	}
+	return ""
 }
 
 // compile prepares the pattern for matching
@@ -55,14 +156,54 @@ func (r *MapRule) Match(url string) bool {
 	if r.compiled != nil {
 		return r.compiled.MatchString(url)
 	}
-	// Simple prefix/suffix matching
-	if strings.HasSuffix(r.Pattern, "*") {
-		return strings.HasPrefix(url, r.Pattern[:len(r.Pattern)-1])
+
+	url = strings.ToLower(url)
+	pattern := strings.ToLower(r.Pattern)
+
+	// Glob pattern with *
+	if strings.Contains(pattern, "*") {
+		return matchGlobPattern(url, pattern)
 	}
-	if strings.HasPrefix(r.Pattern, "*") {
-		return strings.HasSuffix(url, r.Pattern[1:])
+
+	// Exact match (with optional trailing slash)
+	if url == pattern {
+		return true
 	}
-	return strings.Contains(url, r.Pattern)
+	// Match pattern without trailing slash to URL with trailing slash
+	if url == pattern+"/" {
+		return true
+	}
+	// Match pattern with trailing slash to URL without trailing slash
+	if strings.HasSuffix(pattern, "/") && url == strings.TrimSuffix(pattern, "/") {
+		return true
+	}
+
+	return false
+}
+
+// matchGlobPattern matches a URL against a glob pattern
+func matchGlobPattern(url, pattern string) bool {
+	// Convert glob to regex
+	regexPattern := "^"
+	for _, c := range pattern {
+		switch c {
+		case '*':
+			regexPattern += ".*"
+		case '?':
+			regexPattern += "."
+		case '.', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|', '\\':
+			regexPattern += "\\" + string(c)
+		default:
+			regexPattern += string(c)
+		}
+	}
+	regexPattern += "$"
+
+	re, err := regexp.Compile(regexPattern)
+	if err != nil {
+		return false
+	}
+	return re.MatchString(url)
 }
 
 // Apply returns the replacement URL for a matched URL
@@ -120,9 +261,17 @@ func (s *MapRuleStore) Toggle(id int) {
 }
 
 // FindMatch finds the first matching rule for a URL
+// Map Local rules are always checked first, then Map Remote rules
 func (s *MapRuleStore) FindMatch(url string) *MapRule {
+	// First pass: check Map Local rules
 	for _, r := range s.rules {
-		if r.Match(url) {
+		if r.Type == MapLocal && r.Match(url) {
+			return r
+		}
+	}
+	// Second pass: check Map Remote rules
+	for _, r := range s.rules {
+		if r.Type == MapRemote && r.Match(url) {
 			return r
 		}
 	}
@@ -132,4 +281,29 @@ func (s *MapRuleStore) FindMatch(url string) *MapRule {
 // All returns all rules
 func (s *MapRuleStore) All() []*MapRule {
 	return s.rules
+}
+
+// Clear removes all rules
+func (s *MapRuleStore) Clear() {
+	s.rules = make([]*MapRule, 0)
+}
+
+// GetByID returns a rule by ID
+func (s *MapRuleStore) GetByID(id int) *MapRule {
+	for _, r := range s.rules {
+		if r.ID == id {
+			return r
+		}
+	}
+	return nil
+}
+
+// Update updates an existing rule
+func (s *MapRuleStore) Update(rule *MapRule) {
+	for i, r := range s.rules {
+		if r.ID == rule.ID {
+			s.rules[i] = rule
+			return
+		}
+	}
 }

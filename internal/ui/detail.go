@@ -112,6 +112,15 @@ func (dp *DetailPanel) PageDown() {
 	dp.ScrollTo(row+height, col)
 }
 
+// SetFocused updates the border color based on focus state
+func (dp *DetailPanel) SetFocused(focused bool) {
+	if focused {
+		dp.SetBorderColor(tcell.ColorWhite)
+	} else {
+		dp.SetBorderColor(tcell.ColorGray)
+	}
+}
+
 // InputHandler returns an input handler for keyboard navigation
 func (dp *DetailPanel) InputHandler() func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 	return func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {

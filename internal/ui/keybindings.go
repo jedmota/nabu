@@ -22,21 +22,28 @@ const (
 	ActionToggleHelp  Action = "toggle_help"
 
 	// List actions
-	ActionNextItem     Action = "next_item"
-	ActionPrevItem     Action = "prev_item"
-	ActionSelectItem   Action = "select_item"
-	ActionRefresh      Action = "refresh"
-	ActionSearch       Action = "search"
-	ActionFilterAll    Action = "filter_all"
-	ActionFilterWhite  Action = "filter_white"
-	ActionClearFlows   Action = "clear_flows"
+	ActionNextItem       Action = "next_item"
+	ActionPrevItem       Action = "prev_item"
+	ActionSelectItem     Action = "select_item"
+	ActionRefresh        Action = "refresh"
+	ActionSearch         Action = "search"
+	ActionFilterAll      Action = "filter_all"
+	ActionFilterWhite    Action = "filter_white"
+	ActionClearFlows     Action = "clear_flows"
+	ActionAddWhitelist   Action = "add_whitelist"
+	ActionShowWhitelist  Action = "show_whitelist"
+	ActionClearWhitelist Action = "clear_whitelist"
+	ActionMapLocal       Action = "map_local"
+	ActionQuickMapLocal  Action = "quick_map_local"
+	ActionMapRemote      Action = "map_remote"
+	ActionAddMapRemote   Action = "add_map_remote"
 
 	// Detail actions
-	ActionToggleRaw    Action = "toggle_raw"
-	ActionScrollUp     Action = "scroll_up"
-	ActionScrollDown   Action = "scroll_down"
-	ActionPageUp       Action = "page_up"
-	ActionPageDown     Action = "page_down"
+	ActionToggleRaw  Action = "toggle_raw"
+	ActionScrollUp   Action = "scroll_up"
+	ActionScrollDown Action = "scroll_down"
+	ActionPageUp     Action = "page_up"
+	ActionPageDown   Action = "page_down"
 )
 
 // KeyBinding represents a single keybinding
@@ -73,11 +80,17 @@ func NewKeyBindings() *KeyBindings {
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'k', Context: ContextList, Action: ActionPrevItem, Description: "Previous item"})
 	kb.Add(KeyBinding{Key: tcell.KeyUp, Context: ContextList, Action: ActionPrevItem, Description: "Previous item"})
 	kb.Add(KeyBinding{Key: tcell.KeyEnter, Context: ContextList, Action: ActionSelectItem, Description: "View detail"})
-	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'r', Context: ContextList, Action: ActionRefresh, Description: "Refresh"})
-	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '/', Context: ContextList, Action: ActionSearch, Description: "Search"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'r', Context: ContextList, Action: ActionAddMapRemote, Description: "Add map remote rule"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '1', Context: ContextList, Action: ActionFilterAll, Description: "Filter: All"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '2', Context: ContextList, Action: ActionFilterWhite, Description: "Filter: Whitelist"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '/', Context: ContextList, Action: ActionSearch, Description: "Filter: Custom"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'c', Context: ContextList, Action: ActionClearFlows, Description: "Clear flows"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'w', Context: ContextList, Action: ActionAddWhitelist, Description: "Add to whitelist"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'W', Context: ContextList, Action: ActionShowWhitelist, Description: "Show whitelist"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'C', Context: ContextList, Action: ActionClearWhitelist, Description: "Clear whitelist"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'L', Context: ContextList, Action: ActionMapLocal, Description: "Map local manager"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'l', Context: ContextList, Action: ActionQuickMapLocal, Description: "Map selected to local"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'R', Context: ContextList, Action: ActionMapRemote, Description: "Map remote manager"})
 
 	// Detail bindings
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'T', Context: ContextDetail, Action: ActionToggleRaw, Description: "Toggle raw/pretty"})
@@ -87,6 +100,13 @@ func NewKeyBindings() *KeyBindings {
 	kb.Add(KeyBinding{Key: tcell.KeyUp, Context: ContextDetail, Action: ActionScrollUp, Description: "Scroll up"})
 	kb.Add(KeyBinding{Key: tcell.KeyPgDn, Context: ContextDetail, Action: ActionPageDown, Description: "Page down"})
 	kb.Add(KeyBinding{Key: tcell.KeyPgUp, Context: ContextDetail, Action: ActionPageUp, Description: "Page up"})
+	// Whitelist and mapping bindings (same as list context)
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'w', Context: ContextDetail, Action: ActionAddWhitelist, Description: "Add to whitelist"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'W', Context: ContextDetail, Action: ActionShowWhitelist, Description: "Show whitelist"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'l', Context: ContextDetail, Action: ActionQuickMapLocal, Description: "Map selected to local"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'L', Context: ContextDetail, Action: ActionMapLocal, Description: "Map local manager"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'r', Context: ContextDetail, Action: ActionAddMapRemote, Description: "Add map remote rule"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'R', Context: ContextDetail, Action: ActionMapRemote, Description: "Map remote manager"})
 
 	return kb
 }

@@ -17,7 +17,7 @@ import (
 
 func main() {
 	// Parse command line flags
-	port := flag.Int("port", 8080, "Proxy port")
+	port := flag.Int("port", 9090, "Proxy port")
 	bind := flag.String("bind", "0.0.0.0", "Bind address (0.0.0.0 for all interfaces, 127.0.0.1 for localhost only)")
 	verbose := flag.Bool("verbose", false, "Verbose logging")
 	showCA := flag.Bool("show-ca", false, "Show CA certificate path and exit")

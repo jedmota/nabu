@@ -13,9 +13,10 @@ import (
 // RequestsPanel shows the list of HTTP requests
 type RequestsPanel struct {
 	*tview.Table
-	viewModel     *viewmodel.ViewModel
-	onSelect      func(flow *model.Flow)
-	selectedRow   int
+	viewModel      *viewmodel.ViewModel
+	onSelect       func(flow *model.Flow)
+	selectedFlowID model.FlowID
+	stayOnTop      bool
 }
 
 // NewRequestsPanel creates a new requests panel
@@ -31,6 +32,7 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 	rp := &RequestsPanel{
 		Table:     table,
 		viewModel: vm,
+		stayOnTop: true, // Start with stay on top enabled
 	}
 
 	// Set up header
@@ -39,12 +41,19 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 	// Set selection changed handler
 	table.SetSelectionChangedFunc(func(row, column int) {
 		if row > 0 { // Skip header
-			rp.selectedRow = row
+			// Disable stay on top if user navigates away from top
+			if row != 1 && rp.stayOnTop {
+				rp.stayOnTop = false
+				rp.updateTitle()
+			}
 			flows := vm.GetFilteredFlows()
-			if row-1 < len(flows) {
-				vm.SelectFlow(row - 1)
+			// Reverse index: row 1 = last flow (newest)
+			flowIdx := len(flows) - row
+			if flowIdx >= 0 && flowIdx < len(flows) {
+				rp.selectedFlowID = flows[flowIdx].ID
+				vm.SelectFlow(flowIdx)
 				if rp.onSelect != nil {
-					rp.onSelect(flows[row-1])
+					rp.onSelect(flows[flowIdx])
 				}
 			}
 		}
@@ -55,8 +64,8 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 
 // setHeader sets up the table header
 func (rp *RequestsPanel) setHeader() {
-	headers := []string{"#", "Method", "Host", "Path", "Status", "Time"}
-	widths := []int{6, 8, 30, 40, 8, 10}
+	headers := []string{"Time", "Method", "Host", "Path", "Status", "Dur"}
+	widths := []int{12, 8, 30, 40, 8, 10}
 
 	for i, header := range headers {
 		cell := tview.NewTableCell(header).
@@ -73,6 +82,16 @@ func (rp *RequestsPanel) SetOnSelect(fn func(flow *model.Flow)) {
 	rp.onSelect = fn
 }
 
+// updateTitle updates the panel title with count and stay on top indicator
+func (rp *RequestsPanel) updateTitle() {
+	flows := rp.viewModel.GetFilteredFlows()
+	stayIndicator := ""
+	if rp.stayOnTop {
+		stayIndicator = " [yellow]⬆[-]"
+	}
+	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d]%s ", len(flows), rp.viewModel.GetFlowCount(), stayIndicator))
+}
+
 // Refresh updates the table with current flows
 func (rp *RequestsPanel) Refresh() {
 	flows := rp.viewModel.GetFilteredFlows()
@@ -83,20 +102,42 @@ func (rp *RequestsPanel) Refresh() {
 		rp.RemoveRow(i)
 	}
 
-	// Add flow rows
-	for i, flow := range flows {
-		rp.addFlowRow(i+1, flow)
+	// Add flow rows in reverse order (newest first)
+	for i := len(flows) - 1; i >= 0; i-- {
+		row := len(flows) - i // row 1 = newest (last in slice)
+		rp.addFlowRow(row, flows[i])
 	}
 
-	// Update title with count
-	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d] ", len(flows), rp.viewModel.GetFlowCount()))
+	// Update title with count and stay on top indicator
+	rp.updateTitle()
 
-	// Restore selection
-	if rp.selectedRow > 0 && rp.selectedRow <= len(flows) {
-		rp.Select(rp.selectedRow, 0)
-	} else if len(flows) > 0 {
+	if len(flows) == 0 {
+		return
+	}
+
+	// If stay on top is enabled, always select row 1
+	if rp.stayOnTop {
 		rp.Select(1, 0)
-		rp.selectedRow = 1
+		rp.selectedFlowID = flows[len(flows)-1].ID
+		return
+	}
+
+	// Restore selection by flow ID
+	selectedRow := 0
+	if rp.selectedFlowID > 0 {
+		for i, flow := range flows {
+			if flow.ID == rp.selectedFlowID {
+				selectedRow = len(flows) - i // convert to row number
+				break
+			}
+		}
+	}
+
+	if selectedRow > 0 && selectedRow <= len(flows) {
+		rp.Select(selectedRow, 0)
+	} else {
+		rp.Select(1, 0)
+		rp.selectedFlowID = flows[len(flows)-1].ID
 	}
 }
 
@@ -104,42 +145,64 @@ func (rp *RequestsPanel) Refresh() {
 func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
 	method, host, path, status, duration := rp.viewModel.FormatFlowSummary(flow)
 
-	// ID column
-	rp.SetCell(row, 0, tview.NewTableCell(fmt.Sprintf("%d", flow.ID)).
+	// For tunneled flows, override display
+	if flow.Tunneled {
+		method = "TUNNEL"
+		status = "—"
+		path = "(encrypted)"
+	}
+
+	// Timestamp column (HH:MM:SS.mmm)
+	timestamp := flow.StartTime.Format("15:04:05.000")
+	rp.SetCell(row, 0, tview.NewTableCell(timestamp).
 		SetTextColor(tcell.ColorGray).
-		SetMaxWidth(6))
+		SetMaxWidth(12))
 
 	// Method column - color by method
 	methodColor := tcell.ColorWhite
-	switch method {
-	case "GET":
-		methodColor = tcell.ColorGreen
-	case "POST":
-		methodColor = tcell.ColorBlue
-	case "PUT":
-		methodColor = tcell.ColorYellow
-	case "DELETE":
-		methodColor = tcell.ColorRed
-	case "PATCH":
-		methodColor = tcell.ColorOrange
+	if flow.Tunneled {
+		methodColor = tcell.ColorDarkGray
+	} else {
+		switch method {
+		case "GET":
+			methodColor = tcell.ColorGreen
+		case "POST":
+			methodColor = tcell.ColorBlue
+		case "PUT":
+			methodColor = tcell.ColorYellow
+		case "DELETE":
+			methodColor = tcell.ColorRed
+		case "PATCH":
+			methodColor = tcell.ColorOrange
+		}
 	}
 	rp.SetCell(row, 1, tview.NewTableCell(method).
 		SetTextColor(methodColor).
 		SetMaxWidth(8))
 
 	// Host column
+	hostColor := tcell.ColorWhite
+	if flow.Tunneled {
+		hostColor = tcell.ColorDarkGray
+	}
 	rp.SetCell(row, 2, tview.NewTableCell(host).
-		SetTextColor(tcell.ColorWhite).
+		SetTextColor(hostColor).
 		SetMaxWidth(30))
 
 	// Path column
+	pathColor := tcell.ColorGray
+	if flow.Tunneled {
+		pathColor = tcell.ColorDarkGray
+	}
 	rp.SetCell(row, 3, tview.NewTableCell(truncate(path, 40)).
-		SetTextColor(tcell.ColorGray).
+		SetTextColor(pathColor).
 		SetMaxWidth(40))
 
 	// Status column - color by status code
 	statusColor := tcell.ColorWhite
-	if flow.Response != nil {
+	if flow.Tunneled {
+		statusColor = tcell.ColorDarkGray
+	} else if flow.Response != nil {
 		switch {
 		case flow.Response.StatusCode >= 200 && flow.Response.StatusCode < 300:
 			statusColor = tcell.ColorGreen
@@ -158,8 +221,12 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
 		SetMaxWidth(8))
 
 	// Duration column
+	durationColor := tcell.ColorGray
+	if flow.Tunneled {
+		durationColor = tcell.ColorDarkGray
+	}
 	rp.SetCell(row, 5, tview.NewTableCell(duration).
-		SetTextColor(tcell.ColorGray).
+		SetTextColor(durationColor).
 		SetMaxWidth(10))
 }
 
@@ -176,6 +243,34 @@ func (rp *RequestsPanel) MoveDown() {
 	row, _ := rp.GetSelection()
 	if row < rp.GetRowCount()-1 {
 		rp.Select(row+1, 0)
+	}
+}
+
+// GoToTop goes to the top and enables stay on top
+func (rp *RequestsPanel) GoToTop() {
+	rp.stayOnTop = true
+	if rp.GetRowCount() > 1 {
+		rp.Select(1, 0)
+	}
+	rp.Refresh()
+}
+
+// GoToBottom goes to the bottom of the list
+func (rp *RequestsPanel) GoToBottom() {
+	rp.stayOnTop = false
+	rp.updateTitle()
+	rowCount := rp.GetRowCount()
+	if rowCount > 1 {
+		rp.Select(rowCount-1, 0)
+	}
+}
+
+// SetFocused updates the border style based on focus state
+func (rp *RequestsPanel) SetFocused(focused bool) {
+	if focused {
+		rp.SetBorderColor(tcell.ColorWhite)
+	} else {
+		rp.SetBorderColor(tcell.ColorGray)
 	}
 }
 
