@@ -16,7 +16,7 @@ const (
 	colMethodWidth = 7  // DELETE/TUNNEL is longest
 	colHostWidth   = 25 // reasonable host width
 	colStatusWidth = 5  // 3 digits or ERR
-	colDurWidth    = 7  // e.g., "123ms" or "1.23s"
+	colDurWidth    = 10 // e.g., "123ms" or "1.23s"
 )
 
 // RequestsPanel shows the list of HTTP requests
@@ -74,7 +74,6 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 // setHeader sets up the table header
 func (rp *RequestsPanel) setHeader() {
 	headers := []string{"Time", "Method", "Host", "Path", "Status", "Dur"}
-	// All columns have fixed width except Path (index 3) which expands
 	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth}
 
 	for i, header := range headers {
@@ -84,10 +83,17 @@ func (rp *RequestsPanel) setHeader() {
 			SetSelectable(false)
 		if widths[i] > 0 {
 			cell.SetMaxWidth(widths[i])
-		} else {
-			cell.SetExpansion(1) // Path column expands
 		}
+		// Path column (index 3) width is set dynamically in Refresh
 		rp.SetCell(0, i, cell)
+	}
+}
+
+// updateHeaderPathWidth updates the path column header width
+func (rp *RequestsPanel) updateHeaderPathWidth(pathMaxWidth int) {
+	cell := rp.GetCell(0, 3)
+	if cell != nil {
+		cell.SetMaxWidth(pathMaxWidth)
 	}
 }
 
@@ -116,10 +122,24 @@ func (rp *RequestsPanel) Refresh() {
 		rp.RemoveRow(i)
 	}
 
+	// Calculate path width once for all rows
+	_, _, width, _ := rp.GetInnerRect()
+	if width == 0 {
+		width = 120 // default fallback before first render
+	}
+	fixedWidth := colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth
+	pathMaxWidth := width - fixedWidth
+	if pathMaxWidth < 10 {
+		pathMaxWidth = 10
+	}
+
+	// Update header path column width
+	rp.updateHeaderPathWidth(pathMaxWidth)
+
 	// Add flow rows in reverse order (newest first)
 	for i := len(flows) - 1; i >= 0; i-- {
 		row := len(flows) - i // row 1 = newest (last in slice)
-		rp.addFlowRow(row, flows[i])
+		rp.addFlowRow(row, flows[i], pathMaxWidth)
 	}
 
 	// Update title with count and stay on top indicator
@@ -156,7 +176,7 @@ func (rp *RequestsPanel) Refresh() {
 }
 
 // addFlowRow adds a single flow row to the table
-func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
+func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow, pathMaxWidth int) {
 	method, host, path, status, duration := rp.viewModel.FormatFlowSummary(flow)
 
 	// For tunneled flows, override display
@@ -203,25 +223,15 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow) {
 		SetTextColor(hostColor).
 		SetMaxWidth(colHostWidth))
 
-	// Path column - expands to fill remaining space
-	// Calculate available width for path dynamically
-	_, _, width, _ := rp.GetInnerRect()
-	if width == 0 {
-		width = 100 // default fallback before first render
-	}
-	// Only subtract the actual fixed column widths (no gaps - tview handles spacing)
-	fixedWidth := colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth
-	pathMaxWidth := width - fixedWidth
-	if pathMaxWidth < 10 {
-		pathMaxWidth = 10
-	}
+	// Path column - dynamic width based on available space
 	pathColor := tcell.ColorGray
 	if flow.Tunneled {
 		pathColor = tcell.ColorDarkGray
 	}
-	rp.SetCell(row, 3, tview.NewTableCell(truncate(path, pathMaxWidth)).
+	// Set MaxWidth on path to prevent horizontal scroll, let tview clip visually
+	rp.SetCell(row, 3, tview.NewTableCell(path).
 		SetTextColor(pathColor).
-		SetExpansion(1))
+		SetMaxWidth(pathMaxWidth))
 
 	// Status column - fixed width
 	statusColor := tcell.ColorWhite
