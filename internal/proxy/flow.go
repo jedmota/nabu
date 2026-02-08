@@ -9,12 +9,14 @@ import (
 
 // FlowStore manages the collection of flows
 type FlowStore struct {
-	flows    []*model.Flow
-	flowMap  map[model.FlowID]*model.Flow
-	mu       sync.RWMutex
-	nextID   uint64
-	maxFlows int
-	events   chan model.FlowEvent
+	flows       []*model.Flow
+	flowMap     map[model.FlowID]*model.Flow
+	mu          sync.RWMutex
+	nextID      uint64
+	maxFlows    int
+	events      chan model.FlowEvent
+	subscribers []chan model.FlowEvent
+	subMu       sync.Mutex
 }
 
 // NewFlowStore creates a new flow store
@@ -27,6 +29,49 @@ func NewFlowStore(maxFlows int, eventChan chan model.FlowEvent) *FlowStore {
 		flowMap:  make(map[model.FlowID]*model.Flow),
 		maxFlows: maxFlows,
 		events:   eventChan,
+	}
+}
+
+// Subscribe returns a new channel that receives all flow events.
+// Used by the IPC server to fan out events to connected clients.
+func (s *FlowStore) Subscribe() <-chan model.FlowEvent {
+	ch := make(chan model.FlowEvent, 256)
+	s.subMu.Lock()
+	s.subscribers = append(s.subscribers, ch)
+	s.subMu.Unlock()
+	return ch
+}
+
+// Unsubscribe removes a subscriber channel.
+func (s *FlowStore) Unsubscribe(ch <-chan model.FlowEvent) {
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	for i, sub := range s.subscribers {
+		if sub == ch {
+			close(sub)
+			s.subscribers = append(s.subscribers[:i], s.subscribers[i+1:]...)
+			return
+		}
+	}
+}
+
+// emit sends an event to the primary channel and all subscriber channels (non-blocking).
+func (s *FlowStore) emit(event model.FlowEvent) {
+	if s.events != nil {
+		select {
+		case s.events <- event:
+		default:
+		}
+	}
+	s.subMu.Lock()
+	subs := make([]chan model.FlowEvent, len(s.subscribers))
+	copy(subs, s.subscribers)
+	s.subMu.Unlock()
+	for _, ch := range subs {
+		select {
+		case ch <- event:
+		default:
+		}
 	}
 }
 
@@ -49,14 +94,7 @@ func (s *FlowStore) Add(flow *model.Flow) model.FlowID {
 	s.flowMap[id] = flow
 	s.mu.Unlock()
 
-	// Send event
-	if s.events != nil {
-		select {
-		case s.events <- model.FlowEvent{Type: model.FlowEventRequest, Flow: flow}:
-		default:
-			// Don't block if channel is full
-		}
-	}
+	s.emit(model.FlowEvent{Type: model.FlowEventRequest, Flow: flow})
 
 	return id
 }
@@ -67,13 +105,7 @@ func (s *FlowStore) Update(flow *model.Flow, eventType model.FlowEventType) {
 	s.flowMap[flow.ID] = flow
 	s.mu.Unlock()
 
-	// Send event
-	if s.events != nil {
-		select {
-		case s.events <- model.FlowEvent{Type: eventType, Flow: flow}:
-		default:
-		}
-	}
+	s.emit(model.FlowEvent{Type: eventType, Flow: flow})
 }
 
 // Get retrieves a flow by ID
@@ -125,6 +157,37 @@ func (s *FlowStore) Filter(filter *model.FilterState) []*model.Flow {
 		}
 	}
 	return result
+}
+
+// AddWithID inserts a flow that already has an ID (used by IPC clients
+// receiving flows from a primary instance). It does NOT emit events.
+func (s *FlowStore) AddWithID(flow *model.Flow) {
+	s.mu.Lock()
+	if len(s.flows) >= s.maxFlows {
+		removeCount := s.maxFlows / 10
+		for i := 0; i < removeCount; i++ {
+			delete(s.flowMap, s.flows[i].ID)
+		}
+		s.flows = s.flows[removeCount:]
+	}
+	s.flows = append(s.flows, flow)
+	s.flowMap[flow.ID] = flow
+	s.mu.Unlock()
+}
+
+// UpdateFromRemote updates an existing flow by ID, or inserts it if not found.
+// Used by IPC clients. It does NOT emit events.
+func (s *FlowStore) UpdateFromRemote(flow *model.Flow, eventType model.FlowEventType) {
+	s.mu.Lock()
+	if existing, ok := s.flowMap[flow.ID]; ok {
+		// Update in place
+		*existing = *flow
+	} else {
+		// Not found — insert it
+		s.flows = append(s.flows, flow)
+		s.flowMap[flow.ID] = flow
+	}
+	s.mu.Unlock()
 }
 
 // Last returns the last n flows

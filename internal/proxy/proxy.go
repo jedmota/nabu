@@ -159,6 +159,17 @@ func matchGlob(s, pattern string) bool {
 	return re.MatchString(s)
 }
 
+// FlowSource is the interface that abstracts flow data providers.
+// Both *Proxy (primary instance) and IPC adapters (secondary instance) satisfy it.
+type FlowSource interface {
+	Events() <-chan model.FlowEvent
+	FlowStore() *FlowStore
+	SSLProxyList() *SSLProxyList
+	MapRules() *model.MapRuleStore
+	Port() int
+	BindAddress() string
+}
+
 // Proxy represents the HTTP/HTTPS proxy server
 type Proxy struct {
 	server       *http.Server

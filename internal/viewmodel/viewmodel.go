@@ -14,7 +14,7 @@ import (
 
 // ViewModel mediates between the proxy and the UI
 type ViewModel struct {
-	proxy         *proxy.Proxy
+	source        proxy.FlowSource
 	flowStore     *proxy.FlowStore
 	filteredFlows []*model.Flow
 	selectedFlow  *model.Flow
@@ -22,13 +22,14 @@ type ViewModel struct {
 	filter        *model.FilterState
 	mu            sync.RWMutex
 	updateChan    chan struct{}
+	secondary     bool
 }
 
 // New creates a new ViewModel
-func New(p *proxy.Proxy) *ViewModel {
+func New(source proxy.FlowSource) *ViewModel {
 	vm := &ViewModel{
-		proxy:         p,
-		flowStore:     p.FlowStore(),
+		source:        source,
+		flowStore:     source.FlowStore(),
 		filteredFlows: make([]*model.Flow, 0),
 		filter:        model.NewFilterState(),
 		updateChan:    make(chan struct{}, 100),
@@ -43,7 +44,7 @@ func New(p *proxy.Proxy) *ViewModel {
 			})
 			// Only add enabled patterns to SSL proxy list
 			if p.Enabled {
-				vm.proxy.SSLProxyList().Add(p.Pattern)
+				vm.source.SSLProxyList().Add(p.Pattern)
 			}
 		}
 	}
@@ -60,7 +61,7 @@ func New(p *proxy.Proxy) *ViewModel {
 // StartEventLoop starts listening for flow events
 func (vm *ViewModel) StartEventLoop() {
 	go func() {
-		for range vm.proxy.Events() {
+		for range vm.source.Events() {
 			vm.applyFilter()
 			// Signal update
 			select {
@@ -176,7 +177,7 @@ func (vm *ViewModel) AddWhitelistPattern(pattern string) {
 	vm.mu.Unlock()
 
 	// Also add to proxy's SSL proxy list for MITM
-	vm.proxy.SSLProxyList().Add(pattern)
+	vm.source.SSLProxyList().Add(pattern)
 
 	// Save to config file
 	config.AddToWhitelist(pattern)
@@ -196,7 +197,7 @@ func (vm *ViewModel) RemoveWhitelistPattern(pattern string) {
 	vm.mu.Unlock()
 
 	// Also remove from proxy's SSL proxy list
-	vm.proxy.SSLProxyList().Remove(pattern)
+	vm.source.SSLProxyList().Remove(pattern)
 
 	// Save to config file
 	config.RemoveFromWhitelist(pattern)
@@ -215,8 +216,8 @@ func (vm *ViewModel) EditWhitelistPattern(oldPattern, newPattern string) {
 			vm.filter.HostPatterns[i].Pattern = newPattern
 			// Update proxy's SSL proxy list
 			if hp.Enabled {
-				vm.proxy.SSLProxyList().Remove(oldPattern)
-				vm.proxy.SSLProxyList().Add(newPattern)
+				vm.source.SSLProxyList().Remove(oldPattern)
+				vm.source.SSLProxyList().Add(newPattern)
 			}
 			break
 		}
@@ -244,9 +245,9 @@ func (vm *ViewModel) ToggleWhitelistPattern(pattern string) {
 
 	// Update proxy's SSL proxy list
 	if enabled {
-		vm.proxy.SSLProxyList().Add(pattern)
+		vm.source.SSLProxyList().Add(pattern)
 	} else {
-		vm.proxy.SSLProxyList().Remove(pattern)
+		vm.source.SSLProxyList().Remove(pattern)
 	}
 
 	// Save to config file
@@ -271,7 +272,7 @@ func (vm *ViewModel) ClearWhitelist() {
 	vm.mu.Unlock()
 
 	// Also clear proxy's SSL proxy list
-	vm.proxy.SSLProxyList().Clear()
+	vm.source.SSLProxyList().Clear()
 
 	// Save to config file
 	config.ClearWhitelist()
@@ -461,9 +462,24 @@ func isJSON(body []byte) bool {
 	return trimmed[0] == '{' || trimmed[0] == '['
 }
 
-// GetProxy returns the underlying proxy
-func (vm *ViewModel) GetProxy() *proxy.Proxy {
-	return vm.proxy
+// Port returns the port number from the flow source.
+func (vm *ViewModel) Port() int {
+	return vm.source.Port()
+}
+
+// BindAddress returns the bind address from the flow source.
+func (vm *ViewModel) BindAddress() string {
+	return vm.source.BindAddress()
+}
+
+// SetSecondary marks this ViewModel as running in secondary (IPC client) mode.
+func (vm *ViewModel) SetSecondary(v bool) {
+	vm.secondary = v
+}
+
+// IsSecondary returns true if this ViewModel is running as a secondary instance.
+func (vm *ViewModel) IsSecondary() bool {
+	return vm.secondary
 }
 
 // getBaseDomain extracts the base domain from a host (e.g., "api.example.com" -> "example.com")
@@ -484,7 +500,7 @@ func getBaseDomain(host string) string {
 // AddMapLocalRule adds a map local rule
 func (vm *ViewModel) AddMapLocalRule(pattern, localPath string, statusCode int, contentType string) {
 	rule := model.NewMapLocalRule(pattern, localPath, statusCode, contentType)
-	vm.proxy.MapRules().Add(rule)
+	vm.source.MapRules().Add(rule)
 
 	// Save to config
 	config.AddMapLocalEntry(config.MapLocalEntry{
@@ -498,25 +514,25 @@ func (vm *ViewModel) AddMapLocalRule(pattern, localPath string, statusCode int, 
 
 // RemoveMapLocalRule removes a map local rule by ID
 func (vm *ViewModel) RemoveMapLocalRule(id int) {
-	rule := vm.proxy.MapRules().GetByID(id)
+	rule := vm.source.MapRules().GetByID(id)
 	if rule != nil {
 		config.RemoveMapLocalEntry(rule.Pattern)
 	}
-	vm.proxy.MapRules().Remove(id)
+	vm.source.MapRules().Remove(id)
 }
 
 // ToggleMapLocalRule toggles a map local rule
 func (vm *ViewModel) ToggleMapLocalRule(id int) {
-	rule := vm.proxy.MapRules().GetByID(id)
+	rule := vm.source.MapRules().GetByID(id)
 	if rule != nil {
 		config.ToggleMapLocalEntry(rule.Pattern)
 	}
-	vm.proxy.MapRules().Toggle(id)
+	vm.source.MapRules().Toggle(id)
 }
 
 // GetMapLocalRules returns all map local rules
 func (vm *ViewModel) GetMapLocalRules() []*model.MapRule {
-	rules := vm.proxy.MapRules().All()
+	rules := vm.source.MapRules().All()
 	localRules := make([]*model.MapRule, 0)
 	for _, r := range rules {
 		if r.Type == model.MapLocal {
@@ -536,14 +552,14 @@ func (vm *ViewModel) LoadMapLocalRules() {
 	for _, e := range entries {
 		rule := model.NewMapLocalRule(e.Pattern, e.LocalPath, e.StatusCode, e.ContentType)
 		rule.Enabled = e.Enabled
-		vm.proxy.MapRules().Add(rule)
+		vm.source.MapRules().Add(rule)
 	}
 }
 
 // AddMapRemoteRule adds a map remote rule
 func (vm *ViewModel) AddMapRemoteRule(pattern, remoteURL string) {
 	rule := model.NewMapRemoteRule(pattern, remoteURL)
-	vm.proxy.MapRules().Add(rule)
+	vm.source.MapRules().Add(rule)
 
 	// Save to config
 	config.AddMapRemoteEntry(config.MapRemoteEntry{
@@ -555,25 +571,25 @@ func (vm *ViewModel) AddMapRemoteRule(pattern, remoteURL string) {
 
 // RemoveMapRemoteRule removes a map remote rule by ID
 func (vm *ViewModel) RemoveMapRemoteRule(id int) {
-	rule := vm.proxy.MapRules().GetByID(id)
+	rule := vm.source.MapRules().GetByID(id)
 	if rule != nil {
 		config.RemoveMapRemoteEntry(rule.Pattern)
 	}
-	vm.proxy.MapRules().Remove(id)
+	vm.source.MapRules().Remove(id)
 }
 
 // ToggleMapRemoteRule toggles a map remote rule
 func (vm *ViewModel) ToggleMapRemoteRule(id int) {
-	rule := vm.proxy.MapRules().GetByID(id)
+	rule := vm.source.MapRules().GetByID(id)
 	if rule != nil {
 		config.ToggleMapRemoteEntry(rule.Pattern)
 	}
-	vm.proxy.MapRules().Toggle(id)
+	vm.source.MapRules().Toggle(id)
 }
 
 // GetMapRemoteRules returns all map remote rules
 func (vm *ViewModel) GetMapRemoteRules() []*model.MapRule {
-	rules := vm.proxy.MapRules().All()
+	rules := vm.source.MapRules().All()
 	remoteRules := make([]*model.MapRule, 0)
 	for _, r := range rules {
 		if r.Type == model.MapRemote {
@@ -585,12 +601,12 @@ func (vm *ViewModel) GetMapRemoteRules() []*model.MapRule {
 
 // GetMapRemoteRuleByID returns a map remote rule by ID
 func (vm *ViewModel) GetMapRemoteRuleByID(id int) *model.MapRule {
-	return vm.proxy.MapRules().GetByID(id)
+	return vm.source.MapRules().GetByID(id)
 }
 
 // UpdateMapRemoteRule updates an existing map remote rule
 func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL string) {
-	oldRule := vm.proxy.MapRules().GetByID(id)
+	oldRule := vm.source.MapRules().GetByID(id)
 	if oldRule == nil {
 		return
 	}
@@ -602,7 +618,7 @@ func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL string) {
 	newRule := model.NewMapRemoteRule(pattern, remoteURL)
 	newRule.ID = id
 	newRule.Enabled = enabled
-	vm.proxy.MapRules().Update(newRule)
+	vm.source.MapRules().Update(newRule)
 
 	// Update config
 	config.UpdateMapRemoteEntry(oldPattern, config.MapRemoteEntry{
@@ -622,6 +638,6 @@ func (vm *ViewModel) LoadMapRemoteRules() {
 	for _, e := range entries {
 		rule := model.NewMapRemoteRule(e.Pattern, e.RemoteURL)
 		rule.Enabled = e.Enabled
-		vm.proxy.MapRules().Add(rule)
+		vm.source.MapRules().Add(rule)
 	}
 }
