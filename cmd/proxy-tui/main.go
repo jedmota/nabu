@@ -6,15 +6,25 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"proxy-tui/internal/config"
 	"proxy-tui/internal/ipc"
 	"proxy-tui/internal/proxy"
 	"proxy-tui/internal/ui"
 	"proxy-tui/internal/viewmodel"
 	"proxy-tui/pkg/ca"
 )
+
+type stringSlice []string
+
+func (s *stringSlice) String() string { return strings.Join(*s, ", ") }
+func (s *stringSlice) Set(val string) error {
+	*s = append(*s, val)
+	return nil
+}
 
 func main() {
 	// Parse command line flags
@@ -23,7 +33,188 @@ func main() {
 	verbose := flag.Bool("verbose", false, "Verbose logging")
 	showCA := flag.Bool("show-ca", false, "Show CA certificate path and exit")
 	headless := flag.Bool("headless", false, "Run without TUI (for testing)")
+
+	// Add (repeatable, proxy continues to start)
+	var whitelistFlags, mapLocalFlags, mapRemoteFlags stringSlice
+	flag.Var(&whitelistFlags, "whitelist", "Add whitelist pattern (repeatable)")
+	flag.Var(&mapLocalFlags, "map-local", "Add map-local rule as pattern=>localpath (repeatable)")
+	flag.Var(&mapRemoteFlags, "map-remote", "Add map-remote rule as pattern=>remoteurl (repeatable)")
+
+	// List (print with IDs, then exit)
+	listWhitelist := flag.Bool("list-whitelist", false, "List whitelist patterns and exit")
+	listMapLocal := flag.Bool("list-map-local", false, "List map-local rules and exit")
+	listMapRemote := flag.Bool("list-map-remote", false, "List map-remote rules and exit")
+
+	// Remove by 1-based ID (remove, then exit)
+	rmWhitelist := flag.Int("rm-whitelist", 0, "Remove whitelist pattern by ID and exit")
+	rmMapLocal := flag.Int("rm-map-local", 0, "Remove map-local rule by ID and exit")
+	rmMapRemote := flag.Int("rm-map-remote", 0, "Remove map-remote rule by ID and exit")
+
 	flag.Parse()
+
+	// Handle --list-* flags (print and exit)
+	if *listWhitelist {
+		patterns, err := config.LoadWhitelist()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load whitelist: %v\n", err)
+			os.Exit(1)
+		}
+		if len(patterns) == 0 {
+			fmt.Println("No whitelist patterns configured.")
+		} else {
+			for i, p := range patterns {
+				status := "enabled"
+				if !p.Enabled {
+					status = "disabled"
+				}
+				fmt.Printf("%d: %s (%s)\n", i+1, p.Pattern, status)
+			}
+		}
+		return
+	}
+	if *listMapLocal {
+		entries, err := config.LoadMapLocal()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load map-local rules: %v\n", err)
+			os.Exit(1)
+		}
+		if len(entries) == 0 {
+			fmt.Println("No map-local rules configured.")
+		} else {
+			for i, e := range entries {
+				status := "enabled"
+				if !e.Enabled {
+					status = "disabled"
+				}
+				fmt.Printf("%d: %s => %s (%s)\n", i+1, e.Pattern, e.LocalPath, status)
+			}
+		}
+		return
+	}
+	if *listMapRemote {
+		entries, err := config.LoadMapRemote()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load map-remote rules: %v\n", err)
+			os.Exit(1)
+		}
+		if len(entries) == 0 {
+			fmt.Println("No map-remote rules configured.")
+		} else {
+			for i, e := range entries {
+				status := "enabled"
+				if !e.Enabled {
+					status = "disabled"
+				}
+				fmt.Printf("%d: %s => %s (%s)\n", i+1, e.Pattern, e.RemoteURL, status)
+			}
+		}
+		return
+	}
+
+	// Handle --rm-* flags (remove and exit)
+	if *rmWhitelist > 0 {
+		patterns, err := config.LoadWhitelist()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load whitelist: %v\n", err)
+			os.Exit(1)
+		}
+		idx := *rmWhitelist - 1
+		if idx < 0 || idx >= len(patterns) {
+			fmt.Fprintf(os.Stderr, "Invalid whitelist ID %d (have %d entries)\n", *rmWhitelist, len(patterns))
+			os.Exit(1)
+		}
+		removed := patterns[idx]
+		patterns = append(patterns[:idx], patterns[idx+1:]...)
+		if err := config.SaveWhitelist(patterns); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to save whitelist: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Removed whitelist pattern: %s\n", removed.Pattern)
+		return
+	}
+	if *rmMapLocal > 0 {
+		entries, err := config.LoadMapLocal()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load map-local rules: %v\n", err)
+			os.Exit(1)
+		}
+		idx := *rmMapLocal - 1
+		if idx < 0 || idx >= len(entries) {
+			fmt.Fprintf(os.Stderr, "Invalid map-local ID %d (have %d entries)\n", *rmMapLocal, len(entries))
+			os.Exit(1)
+		}
+		removed := entries[idx]
+		entries = append(entries[:idx], entries[idx+1:]...)
+		if err := config.SaveMapLocal(entries); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to save map-local rules: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Removed map-local rule: %s => %s\n", removed.Pattern, removed.LocalPath)
+		return
+	}
+	if *rmMapRemote > 0 {
+		entries, err := config.LoadMapRemote()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load map-remote rules: %v\n", err)
+			os.Exit(1)
+		}
+		idx := *rmMapRemote - 1
+		if idx < 0 || idx >= len(entries) {
+			fmt.Fprintf(os.Stderr, "Invalid map-remote ID %d (have %d entries)\n", *rmMapRemote, len(entries))
+			os.Exit(1)
+		}
+		removed := entries[idx]
+		entries = append(entries[:idx], entries[idx+1:]...)
+		if err := config.SaveMapRemote(entries); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to save map-remote rules: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Removed map-remote rule: %s => %s\n", removed.Pattern, removed.RemoteURL)
+		return
+	}
+
+	// Handle --whitelist / --map-local / --map-remote (add, then continue to start proxy)
+	for _, pattern := range whitelistFlags {
+		if err := config.AddToWhitelist(pattern); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to add whitelist pattern %q: %v\n", pattern, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Added whitelist pattern: %s\n", pattern)
+	}
+	for _, rule := range mapLocalFlags {
+		parts := strings.SplitN(rule, "=>", 2)
+		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "Invalid map-local rule %q (expected pattern=>localpath)\n", rule)
+			os.Exit(1)
+		}
+		entry := config.MapLocalEntry{
+			Pattern:   strings.TrimSpace(parts[0]),
+			LocalPath: strings.TrimSpace(parts[1]),
+			Enabled:   true,
+		}
+		if err := config.AddMapLocalEntry(entry); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to add map-local rule %q: %v\n", rule, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Added map-local rule: %s => %s\n", entry.Pattern, entry.LocalPath)
+	}
+	for _, rule := range mapRemoteFlags {
+		parts := strings.SplitN(rule, "=>", 2)
+		if len(parts) != 2 {
+			fmt.Fprintf(os.Stderr, "Invalid map-remote rule %q (expected pattern=>remoteurl)\n", rule)
+			os.Exit(1)
+		}
+		entry := config.MapRemoteEntry{
+			Pattern:   strings.TrimSpace(parts[0]),
+			RemoteURL: strings.TrimSpace(parts[1]),
+			Enabled:   true,
+		}
+		if err := config.AddMapRemoteEntry(entry); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to add map-remote rule %q: %v\n", rule, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Added map-remote rule: %s => %s\n", entry.Pattern, entry.RemoteURL)
+	}
 
 	// Load or generate CA
 	certificate, err := ca.Load()
