@@ -14,6 +14,8 @@ type WhitelistManager struct {
 	*tview.List
 	viewModel *viewmodel.ViewModel
 	onClose   func()
+	onEdit    func(pattern string)
+	onAdd     func()
 }
 
 // NewWhitelistManager creates a new whitelist manager
@@ -61,6 +63,14 @@ func NewWhitelistManager(vm *viewmodel.ViewModel) *WhitelistManager {
 			case 'd', 'x':
 				wm.deleteSelected()
 				return nil
+			case 'e':
+				wm.editSelected()
+				return nil
+			case 'a':
+				if wm.onAdd != nil {
+					wm.onAdd()
+				}
+				return nil
 			}
 		}
 		return event
@@ -72,6 +82,16 @@ func NewWhitelistManager(vm *viewmodel.ViewModel) *WhitelistManager {
 // SetOnClose sets the callback for when the manager is closed
 func (wm *WhitelistManager) SetOnClose(fn func()) {
 	wm.onClose = fn
+}
+
+// SetOnEdit sets the callback for when a pattern is edited
+func (wm *WhitelistManager) SetOnEdit(fn func(pattern string)) {
+	wm.onEdit = fn
+}
+
+// SetOnAdd sets the callback for when a new pattern is added
+func (wm *WhitelistManager) SetOnAdd(fn func()) {
+	wm.onAdd = fn
 }
 
 // Refresh updates the list with current patterns
@@ -102,7 +122,7 @@ func (wm *WhitelistManager) Refresh() {
 			})
 		}
 		wm.AddItem("", "", 0, nil)
-		wm.AddItem(fmt.Sprintf("[gray]%d/%d enabled | Space: toggle | d: delete | Esc: close[-]", enabledCount, len(patterns)), "", 0, nil)
+		wm.AddItem(fmt.Sprintf("[gray]%d/%d enabled | a: add | e: edit | Space: toggle | d: delete | Esc: close[-]", enabledCount, len(patterns)), "", 0, nil)
 	}
 
 	wm.SetTitle(fmt.Sprintf(" Whitelist Manager [%d] ", len(patterns)))
@@ -117,6 +137,16 @@ func (wm *WhitelistManager) toggleSelected() {
 		wm.viewModel.ToggleWhitelistPattern(patterns[idx].Pattern)
 		wm.Refresh()
 		wm.SetCurrentItem(idx)
+	}
+}
+
+// editSelected edits the currently selected pattern
+func (wm *WhitelistManager) editSelected() {
+	idx := wm.GetCurrentItem()
+	patterns := wm.viewModel.GetWhitelistPatterns()
+
+	if idx >= 0 && idx < len(patterns) && wm.onEdit != nil {
+		wm.onEdit(patterns[idx].Pattern)
 	}
 }
 

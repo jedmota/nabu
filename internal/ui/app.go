@@ -104,8 +104,11 @@ func NewApp(vm *viewmodel.ViewModel) *App {
 
 	// Create whitelist input
 	app.whitelistInput = tview.NewInputField()
-	app.whitelistInput.SetLabel("Add pattern (e.g., *.example.com): ")
-	app.whitelistInput.SetFieldWidth(40)
+	app.whitelistInput.SetBorder(true)
+	app.whitelistInput.SetTitle(" Add Pattern ")
+	app.whitelistInput.SetTitleAlign(tview.AlignCenter)
+	app.whitelistInput.SetLabel(" Pattern (e.g., *.example.com): ")
+	app.whitelistInput.SetFieldWidth(0)
 	app.whitelistInput.SetFieldBackgroundColor(tcell.ColorDefault)
 	app.whitelistInput.SetFieldTextColor(tcell.ColorWhite)
 	app.whitelistInput.SetDoneFunc(func(key tcell.Key) {
@@ -145,6 +148,12 @@ func NewApp(vm *viewmodel.ViewModel) *App {
 	app.whitelistManager = NewWhitelistManager(vm)
 	app.whitelistManager.SetOnClose(func() {
 		app.closeWhitelistManager()
+	})
+	app.whitelistManager.SetOnEdit(func(pattern string) {
+		app.editWhitelistPattern(pattern)
+	})
+	app.whitelistManager.SetOnAdd(func() {
+		app.addWhitelistFromManager()
 	})
 
 	// Create map local manager
@@ -194,7 +203,7 @@ func NewApp(vm *viewmodel.ViewModel) *App {
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 			AddItem(nil, 0, 1, false).
 			AddItem(app.whitelistInput, 3, 0, true).
-			AddItem(nil, 0, 1, false), 60, 0, true).
+			AddItem(nil, 0, 1, false), 90, 0, true).
 		AddItem(nil, 0, 1, false)
 	app.pages.AddPage("whitelist-input", whitelistFlex, true, false)
 
@@ -654,6 +663,75 @@ func (app *App) showWhitelistManager() {
 	app.whitelistManager.Refresh()
 	app.pages.ShowPage("whitelist-manager")
 	app.tviewApp.SetFocus(app.whitelistManager)
+}
+
+// addWhitelistFromManager opens an input to add a pattern from the whitelist manager
+func (app *App) addWhitelistFromManager() {
+	app.addingWhitelist = true
+	app.managingWhitelist = false
+	app.pages.HidePage("whitelist-manager")
+
+	app.whitelistInput.SetTitle(" Add Pattern ")
+	app.whitelistInput.SetLabel(" Pattern (e.g., *.example.com): ")
+	app.whitelistInput.SetText("")
+	app.whitelistInput.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			pattern := app.whitelistInput.GetText()
+			if pattern != "" {
+				app.viewModel.AddWhitelistPattern(pattern)
+				app.layout.SetStatus(fmt.Sprintf("[green]Added pattern: %s[-]", pattern))
+			}
+		}
+		app.addingWhitelist = false
+		app.pages.HidePage("whitelist-input")
+		// Return to whitelist manager
+		app.showWhitelistManager()
+	})
+
+	app.pages.ShowPage("whitelist-input")
+	app.tviewApp.SetFocus(app.whitelistInput)
+}
+
+// editWhitelistPattern opens an input to edit a whitelist pattern
+func (app *App) editWhitelistPattern(oldPattern string) {
+	app.addingWhitelist = true
+	app.managingWhitelist = false
+	app.pages.HidePage("whitelist-manager")
+
+	app.whitelistInput.SetBorder(true)
+	app.whitelistInput.SetTitle(" Edit Pattern ")
+	app.whitelistInput.SetTitleAlign(tview.AlignCenter)
+	app.whitelistInput.SetLabel(" Pattern: ")
+	app.whitelistInput.SetText(oldPattern)
+	app.whitelistInput.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			newPattern := app.whitelistInput.GetText()
+			if newPattern != "" && newPattern != oldPattern {
+				app.viewModel.EditWhitelistPattern(oldPattern, newPattern)
+				app.layout.SetStatus(fmt.Sprintf("[green]Updated pattern: %s → %s[-]", oldPattern, newPattern))
+			}
+		}
+		// Restore original whitelist input style and behavior
+		app.addingWhitelist = false
+		app.pages.HidePage("whitelist-input")
+		app.whitelistInput.SetTitle(" Add Pattern ")
+		app.whitelistInput.SetLabel(" Pattern (e.g., *.example.com): ")
+		app.whitelistInput.SetDoneFunc(func(key tcell.Key) {
+			if key == tcell.KeyEnter {
+				pattern := app.whitelistInput.GetText()
+				if pattern != "" {
+					app.viewModel.AddWhitelistPattern(pattern)
+					app.layout.SetStatus(fmt.Sprintf("[green]Added pattern: %s[-]", pattern))
+				}
+			}
+			app.closeWhitelistInput()
+		})
+		// Return to whitelist manager
+		app.showWhitelistManager()
+	})
+
+	app.pages.ShowPage("whitelist-input")
+	app.tviewApp.SetFocus(app.whitelistInput)
 }
 
 // closeWhitelistManager closes the whitelist manager modal

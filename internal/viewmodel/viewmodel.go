@@ -204,6 +204,31 @@ func (vm *ViewModel) RemoveWhitelistPattern(pattern string) {
 	vm.applyFilter()
 }
 
+// EditWhitelistPattern replaces an old pattern with a new one, preserving enabled state
+func (vm *ViewModel) EditWhitelistPattern(oldPattern, newPattern string) {
+	if newPattern == "" || oldPattern == newPattern {
+		return
+	}
+	vm.mu.Lock()
+	for i, hp := range vm.filter.HostPatterns {
+		if hp.Pattern == oldPattern {
+			vm.filter.HostPatterns[i].Pattern = newPattern
+			// Update proxy's SSL proxy list
+			if hp.Enabled {
+				vm.proxy.SSLProxyList().Remove(oldPattern)
+				vm.proxy.SSLProxyList().Add(newPattern)
+			}
+			break
+		}
+	}
+	vm.mu.Unlock()
+
+	// Update config
+	config.EditWhitelistPattern(oldPattern, newPattern)
+
+	vm.applyFilter()
+}
+
 // ToggleWhitelistPattern toggles the enabled state of a pattern
 func (vm *ViewModel) ToggleWhitelistPattern(pattern string) {
 	vm.mu.Lock()

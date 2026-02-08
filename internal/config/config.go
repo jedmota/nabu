@@ -231,6 +231,23 @@ func RemoveFromWhitelist(pattern string) error {
 	return SaveWhitelist(newPatterns)
 }
 
+// EditWhitelistPattern replaces an old pattern with a new one, preserving enabled state
+func EditWhitelistPattern(oldPattern, newPattern string) error {
+	patterns, err := LoadWhitelist()
+	if err != nil {
+		return err
+	}
+
+	for i, p := range patterns {
+		if p.Pattern == oldPattern {
+			patterns[i].Pattern = newPattern
+			break
+		}
+	}
+
+	return SaveWhitelist(patterns)
+}
+
 // ToggleWhitelistPattern toggles the enabled state of a pattern
 func ToggleWhitelistPattern(pattern string) error {
 	patterns, err := LoadWhitelist()
