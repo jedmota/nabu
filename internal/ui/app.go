@@ -315,9 +315,12 @@ func (app *App) Run() error {
 	})
 
 	// Set proxy address in status bar
-	proxy := app.viewModel.GetProxy()
 	localIP := getLocalIP()
-	app.layout.SetAddress(fmt.Sprintf("%s:%d", localIP, proxy.Port()))
+	addr := fmt.Sprintf("%s:%d", localIP, app.viewModel.Port())
+	if app.viewModel.IsSecondary() {
+		addr = "[yellow]IPC[-] " + addr
+	}
+	app.layout.SetAddress(addr)
 
 	// Initial refresh
 	app.requestsPanel.Refresh()

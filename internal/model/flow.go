@@ -10,13 +10,13 @@ type FlowID uint64
 
 // Flow represents a complete HTTP request/response cycle
 type Flow struct {
-	ID        FlowID
-	Request   *Request
-	Response  *Response
-	StartTime time.Time
-	EndTime   time.Time
-	Error     error
-	Tunneled  bool // True if this was a CONNECT tunnel (no MITM)
+	ID        FlowID    `json:"id"`
+	Request   *Request  `json:"request,omitempty"`
+	Response  *Response `json:"response,omitempty"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	Error     error     `json:"-"`
+	Tunneled  bool      `json:"tunneled,omitempty"`
 }
 
 // Duration returns the time taken for the flow
@@ -34,28 +34,28 @@ func (f *Flow) IsComplete() bool {
 
 // Request represents an HTTP request
 type Request struct {
-	Method  string
-	URL     string
-	Host    string
-	Path    string
-	Proto   string
-	Headers http.Header
-	Body    []byte
+	Method  string      `json:"method"`
+	URL     string      `json:"url"`
+	Host    string      `json:"host"`
+	Path    string      `json:"path"`
+	Proto   string      `json:"proto"`
+	Headers http.Header `json:"headers,omitempty"`
+	Body    []byte      `json:"body,omitempty"`
 }
 
 // Response represents an HTTP response
 type Response struct {
-	StatusCode int
-	Status     string
-	Proto      string
-	Headers    http.Header
-	Body       []byte
+	StatusCode int         `json:"status_code"`
+	Status     string      `json:"status"`
+	Proto      string      `json:"proto"`
+	Headers    http.Header `json:"headers,omitempty"`
+	Body       []byte      `json:"body,omitempty"`
 }
 
 // FlowEvent represents an event in the flow lifecycle
 type FlowEvent struct {
-	Type FlowEventType
-	Flow *Flow
+	Type FlowEventType `json:"type"`
+	Flow *Flow         `json:"flow"`
 }
 
 // FlowEventType indicates what happened to a flow
