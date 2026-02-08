@@ -20,7 +20,7 @@ func NewWhichKey(keybindings *KeyBindings) *WhichKey {
 	tv := tview.NewTextView()
 	tv.SetDynamicColors(true)
 	tv.SetBorder(true)
-	tv.SetTitle(" Keybindings (j/k to scroll, ? to close) ")
+	tv.SetTitle(" Keybindings (? to close) ")
 	tv.SetTitleAlign(tview.AlignCenter)
 	tv.SetScrollable(true)
 
