@@ -6,7 +6,7 @@
 *.dylib
 bin/
 proxytui
-proxy-tui
+# proxy-tui
 
 # Archives
 *.tar.gz
