@@ -182,6 +182,7 @@ func (vm *ViewModel) AddWhitelistPattern(pattern string) {
 	// Save to config file
 	config.AddToWhitelist(pattern)
 
+	vm.notifyConfigChange()
 	vm.applyFilter()
 }
 
@@ -202,6 +203,7 @@ func (vm *ViewModel) RemoveWhitelistPattern(pattern string) {
 	// Save to config file
 	config.RemoveFromWhitelist(pattern)
 
+	vm.notifyConfigChange()
 	vm.applyFilter()
 }
 
@@ -227,6 +229,7 @@ func (vm *ViewModel) EditWhitelistPattern(oldPattern, newPattern string) {
 	// Update config
 	config.EditWhitelistPattern(oldPattern, newPattern)
 
+	vm.notifyConfigChange()
 	vm.applyFilter()
 }
 
@@ -253,6 +256,7 @@ func (vm *ViewModel) ToggleWhitelistPattern(pattern string) {
 	// Save to config file
 	config.ToggleWhitelistPattern(pattern)
 
+	vm.notifyConfigChange()
 	vm.applyFilter()
 }
 
@@ -277,6 +281,7 @@ func (vm *ViewModel) ClearWhitelist() {
 	// Save to config file
 	config.ClearWhitelist()
 
+	vm.notifyConfigChange()
 	vm.applyFilter()
 }
 
@@ -510,6 +515,7 @@ func (vm *ViewModel) AddMapLocalRule(pattern, localPath string, statusCode int, 
 		StatusCode:  statusCode,
 		ContentType: contentType,
 	})
+	vm.notifyConfigChange()
 }
 
 // RemoveMapLocalRule removes a map local rule by ID
@@ -519,6 +525,7 @@ func (vm *ViewModel) RemoveMapLocalRule(id int) {
 		config.RemoveMapLocalEntry(rule.Pattern)
 	}
 	vm.source.MapRules().Remove(id)
+	vm.notifyConfigChange()
 }
 
 // ToggleMapLocalRule toggles a map local rule
@@ -528,6 +535,7 @@ func (vm *ViewModel) ToggleMapLocalRule(id int) {
 		config.ToggleMapLocalEntry(rule.Pattern)
 	}
 	vm.source.MapRules().Toggle(id)
+	vm.notifyConfigChange()
 }
 
 // GetMapLocalRules returns all map local rules
@@ -567,6 +575,7 @@ func (vm *ViewModel) AddMapRemoteRule(pattern, remoteURL string) {
 		RemoteURL: remoteURL,
 		Enabled:   true,
 	})
+	vm.notifyConfigChange()
 }
 
 // RemoveMapRemoteRule removes a map remote rule by ID
@@ -576,6 +585,7 @@ func (vm *ViewModel) RemoveMapRemoteRule(id int) {
 		config.RemoveMapRemoteEntry(rule.Pattern)
 	}
 	vm.source.MapRules().Remove(id)
+	vm.notifyConfigChange()
 }
 
 // ToggleMapRemoteRule toggles a map remote rule
@@ -585,6 +595,7 @@ func (vm *ViewModel) ToggleMapRemoteRule(id int) {
 		config.ToggleMapRemoteEntry(rule.Pattern)
 	}
 	vm.source.MapRules().Toggle(id)
+	vm.notifyConfigChange()
 }
 
 // GetMapRemoteRules returns all map remote rules
@@ -626,6 +637,7 @@ func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL string) {
 		RemoteURL: remoteURL,
 		Enabled:   enabled,
 	})
+	vm.notifyConfigChange()
 }
 
 // LoadMapRemoteRules loads map remote rules from config
@@ -640,4 +652,54 @@ func (vm *ViewModel) LoadMapRemoteRules() {
 		rule.Enabled = e.Enabled
 		vm.source.MapRules().Add(rule)
 	}
+}
+
+// ConfigNotifier is implemented by FlowSource adapters that can notify a
+// primary instance to reload its configuration (e.g. the IPC Adapter).
+type ConfigNotifier interface {
+	NotifyConfigChange()
+}
+
+// notifyConfigChange tells the primary to reload if we are a secondary instance.
+func (vm *ViewModel) notifyConfigChange() {
+	if !vm.secondary {
+		return
+	}
+	if n, ok := vm.source.(ConfigNotifier); ok {
+		n.NotifyConfigChange()
+	}
+}
+
+// ReloadConfig reloads all configuration (whitelist, map-local, map-remote)
+// from disk and replaces the in-memory state.
+func (vm *ViewModel) ReloadConfig() {
+	// Reload whitelist
+	vm.mu.Lock()
+	vm.filter.HostPatterns = nil
+	vm.mu.Unlock()
+	vm.source.SSLProxyList().Clear()
+
+	if patterns, err := config.LoadWhitelist(); err == nil {
+		vm.mu.Lock()
+		for _, p := range patterns {
+			vm.filter.HostPatterns = append(vm.filter.HostPatterns, model.HostPattern{
+				Pattern: p.Pattern,
+				Enabled: p.Enabled,
+			})
+		}
+		vm.mu.Unlock()
+		for _, p := range patterns {
+			if p.Enabled {
+				vm.source.SSLProxyList().Add(p.Pattern)
+			}
+		}
+	}
+
+	// Reload map rules
+	vm.source.MapRules().Clear()
+	vm.LoadMapLocalRules()
+	vm.LoadMapRemoteRules()
+
+	vm.applyFilter()
+	vm.Refresh()
 }

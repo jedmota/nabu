@@ -1,6 +1,7 @@
 package ipc
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -16,12 +17,13 @@ const syncBatchSize = 100
 // It listens on a Unix domain socket and streams flow data to
 // connected secondary instances.
 type Server struct {
-	listener  net.Listener
-	source    proxy.FlowSource
-	sockPath  string
-	clients   map[net.Conn]struct{}
-	clientsMu sync.Mutex
-	done      chan struct{}
+	listener      net.Listener
+	source        proxy.FlowSource
+	sockPath      string
+	clients       map[net.Conn]struct{}
+	clientsMu     sync.Mutex
+	done          chan struct{}
+	configReload  chan struct{}
 }
 
 // NewServer creates and starts a new IPC server.
@@ -37,11 +39,12 @@ func NewServer(source proxy.FlowSource, port int) (*Server, error) {
 	}
 
 	s := &Server{
-		listener: ln,
-		source:   source,
-		sockPath: sockPath,
-		clients:  make(map[net.Conn]struct{}),
-		done:     make(chan struct{}),
+		listener:     ln,
+		source:       source,
+		sockPath:     sockPath,
+		clients:      make(map[net.Conn]struct{}),
+		done:         make(chan struct{}),
+		configReload: make(chan struct{}, 10),
 	}
 
 	go s.acceptLoop()
@@ -136,10 +139,16 @@ func (s *Server) handleClient(conn net.Conn) {
 		return
 	}
 
-	// 5. Stream real-time events
+	// 5. Start reading commands from the client
+	clientDone := make(chan struct{})
+	go s.readClient(conn, clientDone)
+
+	// 6. Stream real-time events
 	for {
 		select {
 		case <-s.done:
+			return
+		case <-clientDone:
 			return
 		case evt, ok := <-sub:
 			if !ok {
@@ -156,6 +165,25 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 }
 
+func (s *Server) readClient(conn net.Conn, done chan struct{}) {
+	defer close(done)
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 0, 64*1024), 64*1024)
+	for scanner.Scan() {
+		msg, err := UnmarshalMessage(scanner.Bytes())
+		if err != nil {
+			continue
+		}
+		switch msg.Type {
+		case "config_reload":
+			select {
+			case s.configReload <- struct{}{}:
+			default:
+			}
+		}
+	}
+}
+
 func (s *Server) writeMessage(conn net.Conn, msgType string, payload interface{}) error {
 	data, err := MarshalMessage(msgType, payload)
 	if err != nil {
@@ -164,6 +192,12 @@ func (s *Server) writeMessage(conn net.Conn, msgType string, payload interface{}
 	data = append(data, '\n')
 	_, err = conn.Write(data)
 	return err
+}
+
+// ConfigReloads returns a channel that receives a signal when a secondary
+// instance requests that the primary reload its configuration from disk.
+func (s *Server) ConfigReloads() <-chan struct{} {
+	return s.configReload
 }
 
 // FlowEvent re-exports for convenience in type assertions
