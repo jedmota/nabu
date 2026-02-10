@@ -51,6 +51,11 @@ func (a *Adapter) Disconnected() <-chan struct{} {
 	return a.client.Disconnected()
 }
 
+// NotifyConfigChange tells the primary instance to reload configs from disk.
+func (a *Adapter) NotifyConfigChange() {
+	a.client.SendConfigReload()
+}
+
 // Close shuts down the underlying client.
 func (a *Adapter) Close() {
 	a.client.Close()

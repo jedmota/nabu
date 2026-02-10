@@ -26,6 +26,20 @@ func (s *stringSlice) Set(val string) error {
 	return nil
 }
 
+// notifyRunningInstance sends a config_reload command to a running instance
+// on the given port, if one exists. Errors are silently ignored.
+func notifyRunningInstance(port int) {
+	if !ipc.IsInstanceRunning(port) {
+		return
+	}
+	client, err := ipc.NewClient(port)
+	if err != nil {
+		return
+	}
+	client.SendConfigReload()
+	client.Close()
+}
+
 func main() {
 	// Parse command line flags
 	port := flag.Int("port", 9090, "Proxy port")
@@ -130,6 +144,7 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("Removed whitelist pattern: %s\n", removed.Pattern)
+		notifyRunningInstance(*port)
 		return
 	}
 	if *rmMapLocal > 0 {
@@ -150,6 +165,7 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("Removed map-local rule: %s => %s\n", removed.Pattern, removed.LocalPath)
+		notifyRunningInstance(*port)
 		return
 	}
 	if *rmMapRemote > 0 {
@@ -170,6 +186,7 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("Removed map-remote rule: %s => %s\n", removed.Pattern, removed.RemoteURL)
+		notifyRunningInstance(*port)
 		return
 	}
 
@@ -214,6 +231,9 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("Added map-remote rule: %s => %s\n", entry.Pattern, entry.RemoteURL)
+	}
+	if len(whitelistFlags) > 0 || len(mapLocalFlags) > 0 || len(mapRemoteFlags) > 0 {
+		notifyRunningInstance(*port)
 	}
 
 	// Load or generate CA
@@ -267,6 +287,15 @@ func runPrimary(port int, bind string, verbose, headless bool, certificate *ca.C
 
 	vm := viewmodel.New(p)
 	vm.StartEventLoop()
+
+	// Listen for config reload requests from secondary instances
+	if ipcServer != nil {
+		go func() {
+			for range ipcServer.ConfigReloads() {
+				vm.ReloadConfig()
+			}
+		}()
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)

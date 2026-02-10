@@ -37,6 +37,9 @@ type FlowEventPayload struct {
 	Flow      FlowWire            `json:"flow"`
 }
 
+// ConfigReloadPayload is sent by a secondary to tell the primary to reload configs from disk.
+type ConfigReloadPayload struct{}
+
 // FlowWire is the wire-format mirror of model.Flow.
 // It replaces Error (error) with ErrorString (string).
 type FlowWire struct {

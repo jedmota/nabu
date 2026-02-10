@@ -157,3 +157,14 @@ func (c *Client) emitEvent(evt model.FlowEvent) {
 	default:
 	}
 }
+
+// SendConfigReload tells the primary instance to reload its configs from disk.
+func (c *Client) SendConfigReload() error {
+	data, err := MarshalMessage("config_reload", ConfigReloadPayload{})
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	_, err = c.conn.Write(data)
+	return err
+}
