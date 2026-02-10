@@ -27,6 +27,7 @@ echo -n "Building version $VERSION to darwin arm64... "
 GOOS=darwin GOARCH=arm64 go build -o $BUILD_DIR/proxy-darwin-arm64 cmd/proxy-tui/main.go
 echo "done!"
 
-# ls -l "$BUILD_DIR"
+cp LICENSE THIRD_PARTY_NOTICES "$BUILD_DIR/"
+
 echo ""
 find "$BUILD_DIR" -type f
