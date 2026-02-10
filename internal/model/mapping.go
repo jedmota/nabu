@@ -3,6 +3,7 @@ package model
 import (
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // MapRuleType defines the type of mapping
@@ -221,6 +222,7 @@ func (r *MapRule) Apply(url string) string {
 
 // MapRuleStore manages mapping rules
 type MapRuleStore struct {
+	mu     sync.RWMutex
 	rules  []*MapRule
 	nextID int
 }
@@ -235,6 +237,8 @@ func NewMapRuleStore() *MapRuleStore {
 
 // Add adds a new rule
 func (s *MapRuleStore) Add(rule *MapRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	rule.ID = s.nextID
 	s.nextID++
 	s.rules = append(s.rules, rule)
@@ -242,6 +246,8 @@ func (s *MapRuleStore) Add(rule *MapRule) {
 
 // Remove removes a rule by ID
 func (s *MapRuleStore) Remove(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for i, r := range s.rules {
 		if r.ID == id {
 			s.rules = append(s.rules[:i], s.rules[i+1:]...)
@@ -252,6 +258,8 @@ func (s *MapRuleStore) Remove(id int) {
 
 // Toggle toggles a rule's enabled state
 func (s *MapRuleStore) Toggle(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, r := range s.rules {
 		if r.ID == id {
 			r.Enabled = !r.Enabled
@@ -263,6 +271,8 @@ func (s *MapRuleStore) Toggle(id int) {
 // FindMatch finds the first matching rule for a URL
 // Map Local rules are always checked first, then Map Remote rules
 func (s *MapRuleStore) FindMatch(url string) *MapRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	// First pass: check Map Local rules
 	for _, r := range s.rules {
 		if r.Type == MapLocal && r.Match(url) {
@@ -280,16 +290,24 @@ func (s *MapRuleStore) FindMatch(url string) *MapRule {
 
 // All returns all rules
 func (s *MapRuleStore) All() []*MapRule {
-	return s.rules
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]*MapRule, len(s.rules))
+	copy(result, s.rules)
+	return result
 }
 
 // Clear removes all rules
 func (s *MapRuleStore) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.rules = make([]*MapRule, 0)
 }
 
 // GetByID returns a rule by ID
 func (s *MapRuleStore) GetByID(id int) *MapRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, r := range s.rules {
 		if r.ID == id {
 			return r
@@ -300,6 +318,8 @@ func (s *MapRuleStore) GetByID(id int) *MapRule {
 
 // Update updates an existing rule
 func (s *MapRuleStore) Update(rule *MapRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for i, r := range s.rules {
 		if r.ID == rule.ID {
 			s.rules[i] = rule
