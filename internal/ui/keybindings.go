@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/gdamore/tcell/v2"
+import (
+	"strconv"
+
+	"github.com/gdamore/tcell/v2"
+)
 
 // Context represents the current UI context for keybindings
 type Context string
@@ -122,7 +126,7 @@ func (kb *KeyBindings) Add(binding KeyBinding) {
 // makeKey creates a unique key for lookup
 func (kb *KeyBindings) makeKey(key tcell.Key, r rune) string {
 	if key != tcell.KeyRune {
-		return string(key)
+		return strconv.Itoa(int(key))
 	}
 	return string(r)
 }

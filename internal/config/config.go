@@ -13,6 +13,10 @@ const (
 	whitelistFile = "whitelist.jsonc"
 )
 
+// configDirOverride, when non-empty, is returned by GetConfigDir instead of
+// the default ~/.proxy-tui. Tests in this package set it directly.
+var configDirOverride string
+
 // WhitelistPattern represents a single whitelist pattern with enabled state
 type WhitelistPattern struct {
 	Pattern string `json:"pattern"`
@@ -26,6 +30,9 @@ type WhitelistConfig struct {
 
 // GetConfigDir returns the configuration directory path
 func GetConfigDir() string {
+	if configDirOverride != "" {
+		return configDirOverride
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return configDir

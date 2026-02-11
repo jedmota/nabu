@@ -24,6 +24,10 @@ const (
 	certCacheSize = 1000
 )
 
+// caDirOverride, when non-empty, is returned by getCADir instead of
+// the default ~/. Tests in this package set it directly.
+var caDirOverride string
+
 // CA manages certificate generation and signing
 type CA struct {
 	cert      *x509.Certificate
@@ -245,6 +249,9 @@ func (ca *CA) Fingerprint() string {
 
 // getCADir returns the directory for storing CA files
 func getCADir() string {
+	if caDirOverride != "" {
+		return caDirOverride
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return defaultCADir
