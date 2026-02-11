@@ -8,13 +8,22 @@ import (
 	"time"
 )
 
+// socketDirOverride, when non-empty, is used by SocketPath instead of
+// the default ~/.proxy-tui. Tests in this package set it directly.
+var socketDirOverride string
+
 // SocketPath returns the Unix domain socket path for a given proxy port.
 func SocketPath(port int) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/tmp"
+	var dir string
+	if socketDirOverride != "" {
+		dir = socketDirOverride
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "/tmp"
+		}
+		dir = filepath.Join(home, ".proxy-tui")
 	}
-	dir := filepath.Join(home, ".proxy-tui")
 	os.MkdirAll(dir, 0o755)
 	return filepath.Join(dir, fmt.Sprintf("proxy-%d.sock", port))
 }
