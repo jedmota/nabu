@@ -113,7 +113,7 @@ func (rp *RequestsPanel) updateTitle() {
 	if rp.viewModel.IsPaused() {
 		pauseIndicator = " [red]PAUSED[-]"
 	}
-	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d]%s%s ", len(flows), rp.viewModel.GetFlowCount(), stayIndicator, pauseIndicator))
+	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d]%s%s ", len(flows), rp.viewModel.GetFlowCount(), pauseIndicator, stayIndicator))
 }
 
 // Refresh updates the table with current flows
