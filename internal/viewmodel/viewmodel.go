@@ -202,7 +202,7 @@ func (vm *ViewModel) ImportFlows(flows []*model.Flow) int {
 	count := 0
 	for _, f := range flows {
 		if f != nil && f.Request != nil {
-			vm.flowStore.Add(f)
+			vm.flowStore.AddDirect(f)
 			count++
 		}
 	}

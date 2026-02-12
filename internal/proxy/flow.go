@@ -90,18 +90,25 @@ func (s *FlowStore) IsPaused() bool {
 	return atomic.LoadUint32(&s.paused) == 1
 }
 
-// Add adds a new flow and returns its ID
+// Add adds a new flow and returns its ID. Skipped when paused.
 func (s *FlowStore) Add(flow *model.Flow) model.FlowID {
 	if s.IsPaused() {
 		return 0
 	}
+	return s.addFlow(flow)
+}
+
+// AddDirect adds a flow regardless of pause state (used for imports).
+func (s *FlowStore) AddDirect(flow *model.Flow) model.FlowID {
+	return s.addFlow(flow)
+}
+
+func (s *FlowStore) addFlow(flow *model.Flow) model.FlowID {
 	id := model.FlowID(atomic.AddUint64(&s.nextID, 1))
 	flow.ID = id
 
 	s.mu.Lock()
-	// Evict old flows if at capacity
 	if len(s.flows) >= s.maxFlows {
-		// Remove oldest 10%
 		removeCount := s.maxFlows / 10
 		for i := 0; i < removeCount; i++ {
 			delete(s.flowMap, s.flows[i].ID)
