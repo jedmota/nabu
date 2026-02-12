@@ -68,125 +68,38 @@ func main() {
 
 	// Handle --list-* flags (print and exit)
 	if *listWhitelist {
-		patterns, err := config.LoadWhitelist()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load whitelist: %v\n", err)
-			os.Exit(1)
-		}
-		if len(patterns) == 0 {
-			fmt.Println("No whitelist patterns configured.")
-		} else {
-			for i, p := range patterns {
-				status := "enabled"
-				if !p.Enabled {
-					status = "disabled"
-				}
-				fmt.Printf("%d: %s (%s)\n", i+1, p.Pattern, status)
-			}
-		}
+		listConfig("whitelist patterns", config.LoadWhitelist,
+			func(p config.WhitelistPattern) (string, bool) { return p.Pattern, p.Enabled })
 		return
 	}
 	if *listMapLocal {
-		entries, err := config.LoadMapLocal()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load map-local rules: %v\n", err)
-			os.Exit(1)
-		}
-		if len(entries) == 0 {
-			fmt.Println("No map-local rules configured.")
-		} else {
-			for i, e := range entries {
-				status := "enabled"
-				if !e.Enabled {
-					status = "disabled"
-				}
-				fmt.Printf("%d: %s => %s (%s)\n", i+1, e.Pattern, e.LocalPath, status)
-			}
-		}
+		listConfig("map-local rules", config.LoadMapLocal,
+			func(e config.MapLocalEntry) (string, bool) { return e.Pattern + " => " + e.LocalPath, e.Enabled })
 		return
 	}
 	if *listMapRemote {
-		entries, err := config.LoadMapRemote()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load map-remote rules: %v\n", err)
-			os.Exit(1)
-		}
-		if len(entries) == 0 {
-			fmt.Println("No map-remote rules configured.")
-		} else {
-			for i, e := range entries {
-				status := "enabled"
-				if !e.Enabled {
-					status = "disabled"
-				}
-				fmt.Printf("%d: %s => %s (%s)\n", i+1, e.Pattern, e.RemoteURL, status)
-			}
-		}
+		listConfig("map-remote rules", config.LoadMapRemote,
+			func(e config.MapRemoteEntry) (string, bool) { return e.Pattern + " => " + e.RemoteURL, e.Enabled })
 		return
 	}
 
 	// Handle --rm-* flags (remove and exit)
 	if *rmWhitelist > 0 {
-		patterns, err := config.LoadWhitelist()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load whitelist: %v\n", err)
-			os.Exit(1)
-		}
-		idx := *rmWhitelist - 1
-		if idx < 0 || idx >= len(patterns) {
-			fmt.Fprintf(os.Stderr, "Invalid whitelist ID %d (have %d entries)\n", *rmWhitelist, len(patterns))
-			os.Exit(1)
-		}
-		removed := patterns[idx]
-		patterns = append(patterns[:idx], patterns[idx+1:]...)
-		if err := config.SaveWhitelist(patterns); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to save whitelist: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Removed whitelist pattern: %s\n", removed.Pattern)
-		notifyRunningInstance(*port)
+		removeConfig("whitelist pattern", *rmWhitelist, *port,
+			config.LoadWhitelist, config.SaveWhitelist,
+			func(p config.WhitelistPattern) string { return p.Pattern })
 		return
 	}
 	if *rmMapLocal > 0 {
-		entries, err := config.LoadMapLocal()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load map-local rules: %v\n", err)
-			os.Exit(1)
-		}
-		idx := *rmMapLocal - 1
-		if idx < 0 || idx >= len(entries) {
-			fmt.Fprintf(os.Stderr, "Invalid map-local ID %d (have %d entries)\n", *rmMapLocal, len(entries))
-			os.Exit(1)
-		}
-		removed := entries[idx]
-		entries = append(entries[:idx], entries[idx+1:]...)
-		if err := config.SaveMapLocal(entries); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to save map-local rules: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Removed map-local rule: %s => %s\n", removed.Pattern, removed.LocalPath)
-		notifyRunningInstance(*port)
+		removeConfig("map-local rule", *rmMapLocal, *port,
+			config.LoadMapLocal, config.SaveMapLocal,
+			func(e config.MapLocalEntry) string { return e.Pattern + " => " + e.LocalPath })
 		return
 	}
 	if *rmMapRemote > 0 {
-		entries, err := config.LoadMapRemote()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load map-remote rules: %v\n", err)
-			os.Exit(1)
-		}
-		idx := *rmMapRemote - 1
-		if idx < 0 || idx >= len(entries) {
-			fmt.Fprintf(os.Stderr, "Invalid map-remote ID %d (have %d entries)\n", *rmMapRemote, len(entries))
-			os.Exit(1)
-		}
-		removed := entries[idx]
-		entries = append(entries[:idx], entries[idx+1:]...)
-		if err := config.SaveMapRemote(entries); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to save map-remote rules: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Removed map-remote rule: %s => %s\n", removed.Pattern, removed.RemoteURL)
-		notifyRunningInstance(*port)
+		removeConfig("map-remote rule", *rmMapRemote, *port,
+			config.LoadMapRemote, config.SaveMapRemote,
+			func(e config.MapRemoteEntry) string { return e.Pattern + " => " + e.RemoteURL })
 		return
 	}
 
@@ -264,7 +177,7 @@ func main() {
 
 // runPrimary starts the proxy, IPC server, and TUI (or headless loop).
 func runPrimary(port int, bind string, verbose, headless bool, certificate *ca.CA) {
-	config := &proxy.Config{
+	proxyCfg := &proxy.Config{
 		Port:        port,
 		BindAddress: bind,
 		CA:          certificate,
@@ -272,7 +185,7 @@ func runPrimary(port int, bind string, verbose, headless bool, certificate *ca.C
 		Verbose:     verbose,
 	}
 
-	p, err := proxy.New(config)
+	p, err := proxy.New(proxyCfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create proxy: %v\n", err)
 		os.Exit(1)
@@ -285,7 +198,7 @@ func runPrimary(port int, bind string, verbose, headless bool, certificate *ca.C
 		// Non-fatal — continue without IPC support
 	}
 
-	vm := viewmodel.New(p)
+	vm := viewmodel.New(p, config.DefaultPersistence{})
 	vm.StartEventLoop()
 
 	// Listen for config reload requests from secondary instances
@@ -373,7 +286,7 @@ func runSecondary(port int) {
 
 	adapter := ipc.NewAdapter(client)
 
-	vm := viewmodel.New(adapter)
+	vm := viewmodel.New(adapter, config.DefaultPersistence{})
 	vm.SetSecondary(true)
 	vm.StartEventLoop()
 
@@ -397,4 +310,47 @@ func runSecondary(port int) {
 	}
 
 	fmt.Println("Goodbye!")
+}
+
+// listConfig loads entries and prints them with 1-based IDs.
+func listConfig[E any](name string, load func() ([]E, error), format func(E) (string, bool)) {
+	entries, err := load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load %s: %v\n", name, err)
+		os.Exit(1)
+	}
+	if len(entries) == 0 {
+		fmt.Printf("No %s configured.\n", name)
+		return
+	}
+	for i, e := range entries {
+		display, enabled := format(e)
+		status := "enabled"
+		if !enabled {
+			status = "disabled"
+		}
+		fmt.Printf("%d: %s (%s)\n", i+1, display, status)
+	}
+}
+
+// removeConfig removes the entry at 1-based id, saves, and notifies any running instance.
+func removeConfig[E any](name string, id, port int, load func() ([]E, error), save func([]E) error, display func(E) string) {
+	entries, err := load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load %s: %v\n", name, err)
+		os.Exit(1)
+	}
+	idx := id - 1
+	if idx < 0 || idx >= len(entries) {
+		fmt.Fprintf(os.Stderr, "Invalid %s ID %d (have %d entries)\n", name, id, len(entries))
+		os.Exit(1)
+	}
+	removed := display(entries[idx])
+	entries = append(entries[:idx], entries[idx+1:]...)
+	if err := save(entries); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to save %s: %v\n", name, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Removed %s: %s\n", name, removed)
+	notifyRunningInstance(port)
 }

@@ -63,16 +63,16 @@ func (s *FlowStore) emit(event model.FlowEvent) {
 		default:
 		}
 	}
+	// Hold subMu while sending so that Unsubscribe cannot close a channel
+	// mid-send. All sends use select/default, so this cannot block.
 	s.subMu.Lock()
-	subs := make([]chan model.FlowEvent, len(s.subscribers))
-	copy(subs, s.subscribers)
-	s.subMu.Unlock()
-	for _, ch := range subs {
+	for _, ch := range s.subscribers {
 		select {
 		case ch <- event:
 		default:
 		}
 	}
+	s.subMu.Unlock()
 }
 
 // Add adds a new flow and returns its ID

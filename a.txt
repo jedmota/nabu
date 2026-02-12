@@ -1,0 +1,15 @@
+Refresh
+Width: 13
+Proxy TUI starting on 0.0.0.0:9090...
+CA Certificate: /home/mota/.proxy-tui/ca.crt
+Refresh
+Width: 113
+Refresh
+Width: 113
+Refresh
+Width: 113
+Refresh
+Width: 113
+
+Shutting down...
+Goodbye!

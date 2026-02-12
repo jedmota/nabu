@@ -190,34 +190,6 @@ func TestFilterState_Combined(t *testing.T) {
 	}
 }
 
-// --- matchPattern ---
-
-func TestMatchPattern(t *testing.T) {
-	tests := []struct {
-		name    string
-		host    string
-		pattern string
-		want    bool
-	}{
-		{"exact", "example.com", "example.com", true},
-		{"wildcard star", "anything.com", "*", true},
-		{"wildcard subdomain", "api.example.com", "*.example.com", true},
-		{"wildcard subdomain bare domain", "example.com", "*.example.com", true},
-		{"general glob", "api.google.com", "*google*", true},
-		{"regex", "api.example.com", "^api\\.", true},
-		{"case insensitive", "Example.COM", "example.com", true},
-		{"no match", "other.com", "example.com", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := matchPattern(tt.host, tt.pattern)
-			if got != tt.want {
-				t.Errorf("matchPattern(%q, %q) = %v, want %v", tt.host, tt.pattern, got, tt.want)
-			}
-		})
-	}
-}
-
 // --- FilterState with actual headers ---
 
 func TestFilterState_Match_FlowWithHeaders(t *testing.T) {

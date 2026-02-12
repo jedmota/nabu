@@ -13,7 +13,7 @@ import (
 // Column width constants (fixed columns - must be fully visible)
 const (
 	colTimeWidth   = 12 // HH:MM:SS.mmm
-	colMethodWidth = 7  // DELETE/TUNNEL is longest
+	colMethodWidth = 6  // DELETE/TUNNEL is longest
 	colHostWidth   = 25 // reasonable host width
 	colStatusWidth = 5  // 3 digits or ERR
 	colDurWidth    = 10 // e.g., "123ms" or "1.23s"
@@ -73,7 +73,7 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 
 // setHeader sets up the table header
 func (rp *RequestsPanel) setHeader() {
-	headers := []string{"Time", "Method", "Host", "Path", "Status", "Dur"}
+	headers := []string{"Time", "Mthd", "Host", "Path", "Code", "Dur"}
 	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth}
 
 	for i, header := range headers {
@@ -114,6 +114,7 @@ func (rp *RequestsPanel) updateTitle() {
 
 // Refresh updates the table with current flows
 func (rp *RequestsPanel) Refresh() {
+	fmt.Println("Refresh")
 	flows := rp.viewModel.GetFilteredFlows()
 
 	// Clear existing rows (except header)
@@ -124,6 +125,7 @@ func (rp *RequestsPanel) Refresh() {
 
 	// Calculate path width once for all rows
 	_, _, width, _ := rp.GetInnerRect()
+	fmt.Println("Width:", width)
 	if width == 0 {
 		width = 120 // default fallback before first render
 	}
@@ -233,7 +235,7 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow, pathMaxWidth int)
 		SetTextColor(pathColor).
 		SetMaxWidth(pathMaxWidth))
 
-	// Status column - fixed width
+	// Status column - fixed width, with alert indicator
 	statusColor := tcell.ColorWhite
 	if flow.Tunneled {
 		statusColor = tcell.ColorDarkGray
@@ -250,6 +252,9 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow, pathMaxWidth int)
 		}
 	} else if flow.Error != nil {
 		statusColor = tcell.ColorRed
+	}
+	if rp.viewModel.CheckAlerts(flow) {
+		status = "!" + status
 	}
 	rp.SetCell(row, 4, tview.NewTableCell(status).
 		SetTextColor(statusColor).

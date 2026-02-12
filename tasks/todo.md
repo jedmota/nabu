@@ -8,157 +8,115 @@
 
 ---
 
-## Phase 1 — Tests (zero coverage today, prerequisite for safe refactoring)
+## Phase 1 — Tests
 
-There are currently **no test files** in the project. Tests should come first — they lock in existing behavior so the refactoring in Phase 2 can be done with confidence.
+All packages now have comprehensive test coverage with `-race` enabled.
 
-### 1.1 `model` package (pure logic, no I/O — easiest to test)
-- [ ] `model/mapping_test.go`
-  - `MapRule.Match` — exact match, glob `*`, glob `?`, regex, trailing slash, disabled rule
-  - `MapRule.Apply` — regex replacement, glob prefix replacement, simple replacement
-  - `MapRuleStore.Add/Remove/Toggle/GetByID/Update` — basic CRUD
-  - `MapRuleStore.FindMatch` — local rules checked before remote, first match wins, disabled rules skipped
-  - `MapRuleStore` concurrency — parallel `FindMatch` + `Add`/`Remove` with `-race`
-  - `DetectContentType` — common extensions, unknown fallback
-- [ ] `model/flow_test.go`
-  - `Flow.IsComplete`, `Flow.Duration`
-- [ ] `model/filter_test.go`
-  - `FilterState` matching logic (FilterAll, FilterWhitelist, FilterCustom)
-  - `HostPattern` matching with enabled/disabled state
+### 1.1 `model` package
+- [x] `model/mapping_test.go` — Match (exact, glob, regex, trailing slash, disabled), Apply, CRUD, FindMatch with priority, concurrency, DetectContentType
+- [x] `model/flow_test.go` — IsComplete, Duration, FlowEventType iota
+- [x] `model/filter_test.go` — FilterAll/Whitelist/Custom, search query, host patterns, methods, status codes, combined
 
-### 1.2 `proxy` package (needs HTTP test harness)
-- [ ] `proxy/ssllist_test.go` (can be written now against existing code)
-  - `SSLProxyList.Add/Remove/Clear/Patterns/Match`
-  - `matchHostPattern` — exact, wildcard `*`, `*.example.com`, regex, port stripping
-  - `matchGlob` — edge cases
-- [ ] `proxy/flow_test.go`
-  - `FlowStore.Add/Get/Update/Clear/Count`
-  - Flow eviction when `maxFlows` exceeded
-  - Event emission on add/update
-  - Subscriber management (`Subscribe`, `Unsubscribe`)
-  - Concurrency: parallel `Add` + `Get` with `-race`
-- [ ] `proxy/proxy_test.go` (integration-level, uses `httptest`)
-  - Start proxy, send HTTP request, verify flow captured
-  - Map-local: request returns local file content
-  - Map-remote: request forwarded to mock backend
-  - JSONC response file parsing
-  - Old HTTP format parsing
-  - Conditional MITM: whitelisted host gets intercepted, non-whitelisted tunnels
+### 1.2 `proxy` package
+- [x] `proxy/proxy_test.go` — SSLProxyList CRUD + Match, parseJSONCResponseFile, buildResponseFromJSON, parseOldHTTPFormat, DefaultConfig
+- [x] `proxy/flow_test.go` — Add/Get/Update/Clear/Count, Filter, eviction, Subscribe/Unsubscribe, non-blocking emit, AddWithID, UpdateFromRemote, Last, concurrency
 
-### 1.3 `config` package (needs temp dir)
-- [ ] `config/config_test.go`
-  - `SaveWhitelist` → `LoadWhitelist` round-trip
-  - JSONC comment stripping
-  - Migration from old formats (plain text, old JSON)
-  - `AddToWhitelist`, `RemoveFromWhitelist`, `ToggleWhitelistPattern`
-- [ ] `config/maplocal_test.go`
-  - `SaveMapLocal` → `LoadMapLocal` round-trip
-  - `AddMapLocalEntry`, `RemoveMapLocalEntry`, `ToggleMapLocalEntry`
-- [ ] `config/mapremote_test.go`
-  - Same pattern as maplocal
+### 1.3 `config` package
+- [x] `config/config_test.go` — Whitelist round-trip, migration (old JSON, plain text), Add/Remove/Edit/Toggle/SetEnabled/Clear, MapLocal CRUD, MapRemote CRUD, escapeJSON, JSONC slash-in-pattern
 
-### 1.4 `ipc` package (needs socket pair)
-- [ ] `ipc/wire_test.go`
-  - Marshal/unmarshal round-trip for each message type (`hello`, `sync`, `flow_event`, `config_reload`)
-- [ ] `ipc/integration_test.go`
-  - Start `Server` + `Client` on a temp socket
-  - Verify hello handshake, flow sync, real-time event streaming
-  - Client disconnect detection
+### 1.4 `ipc` package
+- [x] `ipc/wire_test.go` — FlowToWire/WireToFlow round-trip, MarshalMessage/UnmarshalMessage for all message types
+- [x] `ipc/ipc_test.go` — Server+Client hello handshake, flow sync, real-time streaming, config reload, client disconnect, server stop, IsInstanceRunning
 
-### 1.5 `viewmodel` package (needs mock FlowSource)
-- [ ] Requires `ConfigStore` interface from Phase 3.1 for clean mocking, OR use a temp config dir
-- [ ] `viewmodel/viewmodel_test.go`
-  - Filter switching (All → Whitelist → Custom)
-  - Search query filtering
-  - Whitelist add/remove/toggle/edit → verify SSLProxyList and config updated
-  - Map rule add/remove/toggle
-  - `ReloadConfig` — verify state is replaced, not appended
-  - `FormatFlowSummary` — pending, complete, error states
-  - `FormatFlowDetail` — tunneled, request-only, request+response
+### 1.5 `viewmodel` package
+- [x] `viewmodel/viewmodel_test.go` — Initial state, FormatFlowSummary (complete/nil/pending/error), FormatFlowDetail (tunneled/response), formatDuration, getBaseDomain, SelectFlow, SetSearchQuery, SetFilterType, ClearFlows, whitelist CRUD, IsSecondary
 
 ### 1.6 `pkg/ca` package
-- [ ] `ca/ca_test.go`
-  - `Load` — generates new CA if none exists, reuses existing
-  - `GenerateCert` — returns valid cert for host, caches result
-  - `CertPath`, `Fingerprint` — non-empty, stable
+- [x] `ca/ca_test.go` — Generate, Load (missing/existing), GenerateCert (host/IP/cached), CertPath, Fingerprint, concurrent GenerateCert
 
 ### 1.7 CI
-- [ ] Add `go test -race ./...` to a GitHub Actions workflow or a `Makefile` target
-- [ ] Run on every push / PR
+- [x] Added `Makefile` with `build`, `test`, `lint`, `clean` targets
+- [x] Added `.github/workflows/ci.yml` — runs vet, test (`-race`), and build on push/PR
 
 ---
 
 ## Phase 2 — Code health (bugs, duplication, SRP)
 
 ### 2.1 Extract duplicated utilities into `internal/util`
-- [ ] `stripJSONComments` — duplicated in `proxy/proxy.go` and `config/config.go`
-- [ ] `matchGlob` / `matchGlobPattern` — duplicated in `proxy/proxy.go` and `model/mapping.go`
-- [ ] `isJSON` / `isJSONContent` — duplicated in `viewmodel/viewmodel.go` and `ui/app.go`
+- [x] `stripJSONComments` → `util.StripJSONComments` (removed from `proxy/proxy.go` and `config/config.go`)
+- [x] `matchGlob` / `matchGlobPattern` → `util.MatchGlob` (removed from `proxy/proxy.go`, `model/filter.go`, `model/mapping.go`)
+- [x] `matchHostPattern` / `matchPattern` → `util.MatchHostPattern` (removed from `proxy/proxy.go`, `model/filter.go`)
+- [x] Deduplicated `config/maplocal.go` + `config/mapremote.go` with generic `ConfigStore[E]` in `config/store.go`
+- [x] `isJSON` / `isJSONContent` → `util.IsJSON` (removed from `viewmodel/format.go` and `ui/app.go`)
 
 Single source of truth for each. Update all call sites.
 
-### 2.2 Split `proxy/proxy.go` (867 lines, multiple concerns)
-- [ ] Extract `SSLProxyList` + host pattern matching → `proxy/ssllist.go`
-- [ ] Extract `serveLocalFile`, `parseJSONCResponseFile`, `buildResponseFromJSON`, `parseOldHTTPFormat` → `proxy/maplocal.go`
-- [ ] Extract `fetchRemote` → `proxy/mapremote.go`
-- [ ] Keep `proxy.go` focused on: `Proxy` struct, lifecycle, `handleRequest`, `handleResponse`
+### 2.1b Split `viewmodel/viewmodel.go` by SRP (706 → 4 files)
+- [x] Extract `viewmodel/format.go` — FormatFlowSummary, FormatFlowDetail, formatBody, isJSON, getBaseDomain (186 lines)
+- [x] Extract `viewmodel/whitelist.go` — whitelist CRUD methods (134 lines)
+- [x] Extract `viewmodel/maprules.go` — map local + remote rule CRUD (158 lines)
+- [x] Slim `viewmodel.go` to core only (244 lines)
+
+### 2.2 Split `proxy/proxy.go` (773 lines after Phase 2 extraction, multiple concerns)
+- [x] Extract `SSLProxyList` + host pattern matching → `proxy/ssllist.go`
+- [x] Extract `serveLocalFile`, `parseJSONCResponseFile`, `buildResponseFromJSON`, `parseOldHTTPFormat` → `proxy/serve_local.go`
+- [x] Extract `fetchRemote` → `proxy/serve_remote.go`
+- [x] Keep `proxy.go` focused on: `Proxy` struct, lifecycle, `handleRequest`, `handleResponse` (774 → 329 lines)
 
 ### 2.3 Extract JSONC response builder from `ui/app.go`
-- [ ] `quickMapLocal()` and `createMapLocalWithPattern()` share ~80 lines of identical JSONC-building code (lines 1033-1109 vs 1144-1209)
-- [ ] Extract into a shared function, e.g. `buildJSONCResponse(flow *model.Flow, pattern string) ([]byte, error)`
+- [x] Extracted `writeJSONCMapping` method from `quickMapLocal()` and `createMapLocalWithPattern()`
+- [x] Both methods now call shared helper with different comment lines
 
 ### 2.4 Replace boolean flags with state enum in `ui/App`
-- [ ] Replace the 8 `bool` fields (`searching`, `addingWhitelist`, `addingMapLocalInput`, etc.) with a single `activePopup` enum
-- [ ] Simplify `isPopupOpen()` and `getCurrentPopupPrimitive()` to a switch on the enum
-- [ ] Prevents impossible states (two popups "open" at once)
+- [x] Replace the 8 `bool` fields (`searching`, `addingWhitelist`, `addingMapLocalInput`, etc.) with a single `activePopup PopupState` enum
+- [x] Simplify `isPopupOpen()` and `getCurrentPopupPrimitive()` to a switch on the enum
+- [x] Prevents impossible states (two popups "open" at once)
 
 ---
 
 ## Phase 3 — Design improvements (DIP, ISP, testability)
 
 ### 3.1 Inject config persistence into ViewModel
-- [ ] Define a `ConfigStore` interface:
-  ```go
-  type ConfigStore interface {
-      LoadWhitelist() ([]WhitelistPattern, error)
-      SaveWhitelist([]WhitelistPattern) error
-      LoadMapLocal() ([]MapLocalEntry, error)
-      AddMapLocalEntry(MapLocalEntry) error
-      // ... etc
-  }
-  ```
-- [ ] `config` package implements it
-- [ ] `ViewModel.New()` takes `ConfigStore` as a parameter instead of calling `config.*` directly
-- [ ] Enables unit testing ViewModel without filesystem
+- [x] Defined `ConfigPersistence` interface in `viewmodel` package (15 methods: whitelist + map-local + map-remote)
+- [x] `config.DefaultPersistence` struct implements it by delegating to package-level functions
+- [x] `ViewModel.New()` takes `ConfigPersistence` as a parameter — all direct `config.*` calls replaced with `vm.config.*`
+- [x] Enables unit testing ViewModel without filesystem
 
-### 3.2 Reduce `FlowSource` surface area
-- [ ] Current interface leaks concrete types (`*FlowStore`, `*SSLProxyList`, `*MapRuleStore`), letting consumers mutate internals freely
-- [ ] Option A: Add methods to `FlowSource` (e.g. `AddSSLPattern(string)`, `RemoveSSLPattern(string)`) and stop exposing stores
-- [ ] Option B: Define read-only sub-interfaces for the stores
-- [ ] Evaluate impact on `ViewModel` and `Adapter` before choosing
+### 3.2 Reduce `FlowSource` surface area (ISP)
+- [x] Split `FlowSource` into `FlowProvider` (FlowStore, Port, BindAddress) + full `FlowSource` (embeds FlowProvider + Events, SSLProxyList, MapRules)
+- [x] IPC Server now accepts the narrower `FlowProvider` interface
+- [x] ViewModel still uses the full `FlowSource`
+
+### 3.2b Make MapRuleStore.FindMatch open/closed with Priority
+- [x] Added `Priority` field to `MapRule` (higher = checked first)
+- [x] Default priorities: `PriorityMapLocal=100`, `PriorityMapRemote=50`
+- [x] `FindMatch` now picks the highest-priority match in a single pass (no more hardcoded two-pass by type)
 
 ### 3.3 Deduplicate CLI handlers in `main.go`
-- [ ] The list/remove handlers for whitelist, map-local, map-remote (lines 70-191) repeat the same pattern 3 times
-- [ ] Extract a generic `listConfig` and `removeConfig` helper
+- [x] Extracted generic `listConfig[E]` and `removeConfig[E]` helper functions
+- [x] Replaced 6 repetitive handler blocks with concise calls to these helpers
 
 ---
 
 ## Phase 4 — Features (from SPECIFICATION.md roadmap)
 
 ### 4.1 Replay requests
-- [ ] Add a "replay" action to the TUI (keybinding `p`)
-- [ ] Re-send the selected flow's request through the proxy
-- [ ] Show the new response as a separate flow
+- [x] Added `ReplayFlow` method in `viewmodel/replay.go` — sends request through proxy via HTTP transport
+- [x] Keybinding `p` in both list and detail contexts
+- [x] Status bar feedback: "Replaying request..." → "Request replayed" / error
 
 ### 4.2 Export flows
-- [ ] Export selected flow as cURL command (copy to clipboard)
-- [ ] Export selected flow as HAR format (save to file)
-- [ ] Export all flows as HAR
+- [x] `FormatCURL` in `viewmodel/export.go` — generates cURL command with headers, body, method
+- [x] `FormatHAR` in `viewmodel/export.go` — generates HAR 1.2 JSON for one or more flows
+- [x] Keybinding `x` → copy cURL to clipboard (xclip/xsel/wl-copy/pbcopy)
+- [x] Keybinding `e` → export selected flow (or all filtered) as HAR to temp file
 
 ### 4.3 Alerts
-- [ ] Configurable alert rules (5xx status, latency threshold)
-- [ ] Visual indicator in requests panel when an alert triggers
-- [ ] Optional desktop notification
+- [x] `AlertRule` model (`model/alert.go`) — `status_code` (match by class, e.g. 5xx) and `latency` (ms threshold)
+- [x] Config persistence (`config/alerts.go`) — saves to `alerts.json`, defaults to 5xx enabled + latency 5s disabled
+- [x] ViewModel integration (`viewmodel/alerts.go`) — `CheckAlerts`, `ToggleAlertRule`, `GetAlertRules`, `SetAlertRules`
+- [x] Visual indicator `!` prefix on status column in requests panel when alert matches
+- [x] Alert manager UI (`ui/alerts.go`) — keybinding `a`, toggle rules with Enter/Space
 
 ---
 

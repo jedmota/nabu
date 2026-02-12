@@ -64,8 +64,8 @@ func NewLayout(requestsPanel *RequestsPanel, detailPanel *DetailPanel) *Layout {
 // setupNormalLayout sets up the default two-panel layout
 func (l *Layout) setupNormalLayout() {
 	l.grid.Clear()
-	l.grid.SetRows(1, 0, 1)   // Filter bar, main content, status bar
-	l.grid.SetColumns(-11, -9) // 55% requests, 45% detail
+	l.grid.SetRows(1, 0, 1)    // Filter bar, main content, status bar
+	l.grid.SetColumns(-13, -7) // 55% requests, 45% detail
 
 	l.grid.AddItem(l.filterBar, 0, 0, 1, 2, 0, 0, false)
 	l.grid.AddItem(l.requestsPanel, 1, 0, 1, 1, 0, 0, true)
