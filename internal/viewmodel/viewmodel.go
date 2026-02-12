@@ -210,6 +210,64 @@ func (vm *ViewModel) ImportFlows(flows []*model.Flow) int {
 	return count
 }
 
+// TogglePause toggles the paused state. Returns true if now paused.
+func (vm *ViewModel) TogglePause() bool {
+	paused := !vm.flowStore.IsPaused()
+	vm.flowStore.SetPaused(paused)
+	return paused
+}
+
+// IsPaused returns whether capture is paused.
+func (vm *ViewModel) IsPaused() bool {
+	return vm.flowStore.IsPaused()
+}
+
+// ToggleStar toggles the starred state of a flow. Returns true if now starred.
+func (vm *ViewModel) ToggleStar(flow *model.Flow) bool {
+	if flow == nil {
+		return false
+	}
+	vm.mu.Lock()
+	defer vm.mu.Unlock()
+	if vm.filter.StarredIDs[flow.ID] {
+		delete(vm.filter.StarredIDs, flow.ID)
+		return false
+	}
+	vm.filter.StarredIDs[flow.ID] = true
+	return true
+}
+
+// StarFlows stars all the given flows.
+func (vm *ViewModel) StarFlows(flows []*model.Flow) int {
+	vm.mu.Lock()
+	defer vm.mu.Unlock()
+	count := 0
+	for _, f := range flows {
+		if f != nil && !vm.filter.StarredIDs[f.ID] {
+			vm.filter.StarredIDs[f.ID] = true
+			count++
+		}
+	}
+	return count
+}
+
+// IsStarred returns whether a flow is starred.
+func (vm *ViewModel) IsStarred(flow *model.Flow) bool {
+	if flow == nil {
+		return false
+	}
+	vm.mu.RLock()
+	defer vm.mu.RUnlock()
+	return vm.filter.StarredIDs[flow.ID]
+}
+
+// StarredCount returns the number of starred flows.
+func (vm *ViewModel) StarredCount() int {
+	vm.mu.RLock()
+	defer vm.mu.RUnlock()
+	return len(vm.filter.StarredIDs)
+}
+
 // ClearFlows clears all flows
 func (vm *ViewModel) ClearFlows() {
 	vm.flowStore.Clear()

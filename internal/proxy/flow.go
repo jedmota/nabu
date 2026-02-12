@@ -14,6 +14,7 @@ type FlowStore struct {
 	mu          sync.RWMutex
 	nextID      uint64
 	maxFlows    int
+	paused      uint32 // atomic: 1 = paused
 	events      chan model.FlowEvent
 	subscribers []chan model.FlowEvent
 	subMu       sync.Mutex
@@ -75,8 +76,25 @@ func (s *FlowStore) emit(event model.FlowEvent) {
 	s.subMu.Unlock()
 }
 
+// SetPaused sets the paused state. When paused, Add and Update are no-ops.
+func (s *FlowStore) SetPaused(paused bool) {
+	if paused {
+		atomic.StoreUint32(&s.paused, 1)
+	} else {
+		atomic.StoreUint32(&s.paused, 0)
+	}
+}
+
+// IsPaused returns whether the store is paused.
+func (s *FlowStore) IsPaused() bool {
+	return atomic.LoadUint32(&s.paused) == 1
+}
+
 // Add adds a new flow and returns its ID
 func (s *FlowStore) Add(flow *model.Flow) model.FlowID {
+	if s.IsPaused() {
+		return 0
+	}
 	id := model.FlowID(atomic.AddUint64(&s.nextID, 1))
 	flow.ID = id
 
@@ -101,6 +119,9 @@ func (s *FlowStore) Add(flow *model.Flow) model.FlowID {
 
 // Update updates an existing flow (e.g., with response)
 func (s *FlowStore) Update(flow *model.Flow, eventType model.FlowEventType) {
+	if s.IsPaused() {
+		return
+	}
 	s.mu.Lock()
 	s.flowMap[flow.ID] = flow
 	s.mu.Unlock()

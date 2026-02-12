@@ -187,33 +187,35 @@ func (p *Proxy) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.R
 	// Store flow ID in context for response handler
 	ctx.UserData = flowID
 
-	// Check for mapping rules
-	if rule := p.mapRules.FindMatch(fullURL); rule != nil {
-		var resp *http.Response
+	// Check for mapping rules (skip when paused — full bypass)
+	if !p.flowStore.IsPaused() {
+		if rule := p.mapRules.FindMatch(fullURL); rule != nil {
+			var resp *http.Response
 
-		switch rule.Type {
-		case model.MapLocal:
-			resp = p.serveLocalFile(rule, req, flow)
-		case model.MapRemote:
-			resp = p.fetchRemote(rule, req, flow)
-		}
+			switch rule.Type {
+			case model.MapLocal:
+				resp = p.serveLocalFile(rule, req, flow)
+			case model.MapRemote:
+				resp = p.fetchRemote(rule, req, flow)
+			}
 
-		if resp != nil {
-			// Update flow with the mapped response
-			flow.Response = &model.Response{
-				StatusCode: resp.StatusCode,
-				Status:     resp.Status,
-				Proto:      resp.Proto,
-				Headers:    resp.Header.Clone(),
+			if resp != nil {
+				// Update flow with the mapped response
+				flow.Response = &model.Response{
+					StatusCode: resp.StatusCode,
+					Status:     resp.Status,
+					Proto:      resp.Proto,
+					Headers:    resp.Header.Clone(),
+				}
+				if resp.Body != nil {
+					bodyBytes, _ := io.ReadAll(resp.Body)
+					flow.Response.Body = bodyBytes
+					resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+				}
+				flow.EndTime = time.Now()
+				p.flowStore.Update(flow, model.FlowEventResponse)
+				return req, resp
 			}
-			if resp.Body != nil {
-				bodyBytes, _ := io.ReadAll(resp.Body)
-				flow.Response.Body = bodyBytes
-				resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-			}
-			flow.EndTime = time.Now()
-			p.flowStore.Update(flow, model.FlowEventResponse)
-			return req, resp
 		}
 	}
 

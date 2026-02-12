@@ -13,7 +13,7 @@ import (
 // Column width constants (fixed columns - must be fully visible)
 const (
 	colTimeWidth   = 12 // HH:MM:SS.mmm
-	colMethodWidth = 6  // DELETE/TUNNEL is longest
+	colMethodWidth = 8  // DELETE/TUNNEL is longest
 	colHostWidth   = 25 // reasonable host width
 	colStatusWidth = 5  // 3 digits or ERR
 	colDurWidth    = 10 // e.g., "123ms" or "1.23s"
@@ -73,8 +73,8 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 
 // setHeader sets up the table header
 func (rp *RequestsPanel) setHeader() {
-	headers := []string{"Time", "Mthd", "Host", "Path", "Code", "Dur"}
-	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth}
+	headers := []string{"Time", "Method", "Host", "Path", "Code", "Dur", "*"}
+	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth, 1}
 
 	for i, header := range headers {
 		cell := tview.NewTableCell(header).
@@ -109,7 +109,11 @@ func (rp *RequestsPanel) updateTitle() {
 	if rp.stayOnTop {
 		stayIndicator = " [yellow]⬆[-]"
 	}
-	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d]%s ", len(flows), rp.viewModel.GetFlowCount(), stayIndicator))
+	pauseIndicator := ""
+	if rp.viewModel.IsPaused() {
+		pauseIndicator = " [red]PAUSED[-]"
+	}
+	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d]%s%s ", len(flows), rp.viewModel.GetFlowCount(), stayIndicator, pauseIndicator))
 }
 
 // Refresh updates the table with current flows
@@ -129,7 +133,7 @@ func (rp *RequestsPanel) Refresh() {
 	if width == 0 {
 		width = 120 // default fallback before first render
 	}
-	fixedWidth := colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth
+	fixedWidth := colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth + 1
 	pathMaxWidth := width - fixedWidth
 	if pathMaxWidth < 10 {
 		pathMaxWidth = 10
@@ -268,6 +272,15 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow, pathMaxWidth int)
 	rp.SetCell(row, 5, tview.NewTableCell(duration).
 		SetTextColor(durationColor).
 		SetMaxWidth(colDurWidth))
+
+	// Star column
+	starText := ""
+	if rp.viewModel.IsStarred(flow) {
+		starText = "*"
+	}
+	rp.SetCell(row, 6, tview.NewTableCell(starText).
+		SetTextColor(tcell.ColorYellow).
+		SetMaxWidth(1))
 }
 
 // MoveUp moves selection up
