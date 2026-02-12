@@ -43,11 +43,15 @@ const (
 	ActionAddMapRemote   Action = "add_map_remote"
 
 	// Flow actions
-	ActionReplay    Action = "replay"
-	ActionCopyCURL  Action = "copy_curl"
+	ActionReplay       Action = "replay"
+	ActionCopyCURL     Action = "copy_curl"
 	ActionExportHAR    Action = "export_har"
 	ActionExportAllHAR Action = "export_all_har"
 	ActionImportHAR    Action = "import_har"
+	ActionPause        Action = "pause"
+	ActionStar         Action = "star"
+	ActionStarAll      Action = "star_all"
+	ActionFilterStar   Action = "filter_star"
 
 	// Alert actions
 	ActionAlerts Action = "alerts"
@@ -105,11 +109,15 @@ func NewKeyBindings() *KeyBindings {
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'L', Context: ContextList, Action: ActionMapLocal, Description: "Map local manager"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'l', Context: ContextList, Action: ActionQuickMapLocal, Description: "Map selected to local"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'R', Context: ContextList, Action: ActionMapRemote, Description: "Map remote manager"})
-	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'p', Context: ContextList, Action: ActionReplay, Description: "Replay request"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'p', Context: ContextList, Action: ActionPause, Description: "Pause/resume capture"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '.', Context: ContextList, Action: ActionReplay, Description: "Replay request"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'x', Context: ContextList, Action: ActionCopyCURL, Description: "Copy as cURL"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'e', Context: ContextList, Action: ActionExportHAR, Description: "Export selected as HAR"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'E', Context: ContextList, Action: ActionExportAllHAR, Description: "Export all as HAR"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'i', Context: ContextList, Action: ActionImportHAR, Description: "Import HAR file"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 's', Context: ContextList, Action: ActionStar, Description: "Star selected flow"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'S', Context: ContextList, Action: ActionStarAll, Description: "Star all listed flows"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '3', Context: ContextList, Action: ActionFilterStar, Description: "Filter: Starred"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'a', Context: ContextList, Action: ActionAlerts, Description: "Alert settings"})
 
 	// Detail bindings
@@ -127,10 +135,14 @@ func NewKeyBindings() *KeyBindings {
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'L', Context: ContextDetail, Action: ActionMapLocal, Description: "Map local manager"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'r', Context: ContextDetail, Action: ActionAddMapRemote, Description: "Add map remote rule"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'R', Context: ContextDetail, Action: ActionMapRemote, Description: "Map remote manager"})
-	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'p', Context: ContextDetail, Action: ActionReplay, Description: "Replay request"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'p', Context: ContextDetail, Action: ActionPause, Description: "Pause/resume capture"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '.', Context: ContextDetail, Action: ActionReplay, Description: "Replay request"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'x', Context: ContextDetail, Action: ActionCopyCURL, Description: "Copy as cURL"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'e', Context: ContextDetail, Action: ActionExportHAR, Description: "Export selected as HAR"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'E', Context: ContextDetail, Action: ActionExportAllHAR, Description: "Export all as HAR"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 's', Context: ContextDetail, Action: ActionStar, Description: "Star selected flow"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'S', Context: ContextDetail, Action: ActionStarAll, Description: "Star all listed flows"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: '3', Context: ContextDetail, Action: ActionFilterStar, Description: "Filter: Starred"})
 
 	return kb
 }

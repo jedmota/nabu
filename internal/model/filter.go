@@ -13,6 +13,7 @@ const (
 	FilterAll FilterType = iota
 	FilterWhitelist
 	FilterCustom
+	FilterStarred
 )
 
 // HostPattern represents a whitelist pattern with enabled state
@@ -28,6 +29,7 @@ type FilterState struct {
 	HostPatterns []HostPattern
 	Methods      []string
 	StatusCodes  []int
+	StarredIDs   map[FlowID]bool
 }
 
 // NewFilterState creates a default filter state
@@ -37,6 +39,7 @@ func NewFilterState() *FilterState {
 		HostPatterns: []HostPattern{},
 		Methods:      []string{},
 		StatusCodes:  []int{},
+		StarredIDs:   make(map[FlowID]bool),
 	}
 }
 
@@ -44,6 +47,11 @@ func NewFilterState() *FilterState {
 func (f *FilterState) Match(flow *Flow) bool {
 	if flow == nil || flow.Request == nil {
 		return false
+	}
+
+	// Starred filter: only show starred flows
+	if f.Type == FilterStarred {
+		return f.StarredIDs[flow.ID]
 	}
 
 	// Check search query

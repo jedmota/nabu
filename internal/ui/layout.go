@@ -179,6 +179,7 @@ func (l *Layout) SetFilter(filterType model.FilterType) {
 func (l *Layout) updateFilterBar() {
 	allStyle := "[gray]"
 	whitelistStyle := "[gray]"
+	starStyle := "[gray]"
 	customStyle := "[gray]"
 
 	switch l.activeFilter {
@@ -186,6 +187,8 @@ func (l *Layout) updateFilterBar() {
 		allStyle = "[white:black]"
 	case model.FilterWhitelist:
 		whitelistStyle = "[white:black]"
+	case model.FilterStarred:
+		starStyle = "[white:black]"
 	case model.FilterCustom:
 		customStyle = "[white:black]"
 	}
@@ -195,7 +198,7 @@ func (l *Layout) updateFilterBar() {
 		customText = " /:" + l.customPattern + " "
 	}
 
-	l.filterBar.SetText(allStyle + " 1:All [-] " + whitelistStyle + " 2:Whitelist [-] " + customStyle + customText + "[-]")
+	l.filterBar.SetText(allStyle + " 1:All [-] " + whitelistStyle + " 2:Whitelist [-] " + starStyle + " 3:Starred [-] " + customStyle + customText + "[-]")
 }
 
 // SetCustomPattern sets the custom filter pattern

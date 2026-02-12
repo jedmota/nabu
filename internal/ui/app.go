@@ -613,6 +613,40 @@ func (app *App) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		app.openImportInput()
 		return nil
 
+	case ActionPause:
+		if app.viewModel.TogglePause() {
+			app.layout.SetStatus("[red]Paused[-]")
+		} else {
+			app.layout.SetStatus("[green]Resumed[-]")
+		}
+		app.requestsPanel.Refresh()
+		return nil
+
+	case ActionStar:
+		flow := app.viewModel.GetSelectedFlow()
+		if flow == nil {
+			app.layout.SetStatus("[red]No request selected[-]")
+		} else if app.viewModel.ToggleStar(flow) {
+			app.layout.SetStatus(fmt.Sprintf("[yellow]Starred[-] (%d total)", app.viewModel.StarredCount()))
+		} else {
+			app.layout.SetStatus(fmt.Sprintf("[gray]Unstarred[-] (%d total)", app.viewModel.StarredCount()))
+		}
+		app.requestsPanel.Refresh()
+		return nil
+
+	case ActionStarAll:
+		flows := app.viewModel.GetFilteredFlows()
+		count := app.viewModel.StarFlows(flows)
+		app.layout.SetStatus(fmt.Sprintf("[yellow]Starred %d flows[-] (%d total)", count, app.viewModel.StarredCount()))
+		app.requestsPanel.Refresh()
+		return nil
+
+	case ActionFilterStar:
+		app.viewModel.SetFilterType(model.FilterStarred)
+		app.layout.SetFilter(model.FilterStarred)
+		app.requestsPanel.Refresh()
+		return nil
+
 	case ActionToggleRaw:
 		app.detailPanel.ToggleRawMode()
 		return nil
