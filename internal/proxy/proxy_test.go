@@ -104,35 +104,6 @@ func TestSSLProxyList_Concurrent(t *testing.T) {
 	wg.Wait()
 }
 
-// --- stripJSONComments ---
-
-func TestStripJSONComments(t *testing.T) {
-	input := `{
-  // this is a comment
-  "key": "value", // inline comment
-  "url": "http://example.com"
-}
-`
-	got := string(stripJSONComments([]byte(input)))
-	if strings.Contains(got, "// this is a comment") {
-		t.Error("line comment should be stripped")
-	}
-	if strings.Contains(got, "// inline comment") {
-		t.Error("inline comment should be stripped")
-	}
-	if !strings.Contains(got, `"key": "value"`) {
-		t.Error("values should be preserved")
-	}
-}
-
-func TestStripJSONComments_InsideString(t *testing.T) {
-	input := `{"url": "http://example.com//path"}`
-	got := string(stripJSONComments([]byte(input)))
-	if !strings.Contains(got, "http://example.com//path") {
-		t.Error("// inside string should be preserved")
-	}
-}
-
 // --- parseJSONCResponseFile ---
 
 func TestParseJSONCResponseFile_Valid(t *testing.T) {

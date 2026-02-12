@@ -18,7 +18,7 @@ const syncBatchSize = 100
 // connected secondary instances.
 type Server struct {
 	listener      net.Listener
-	source        proxy.FlowSource
+	source        proxy.FlowProvider
 	sockPath      string
 	clients       map[net.Conn]struct{}
 	clientsMu     sync.Mutex
@@ -27,7 +27,7 @@ type Server struct {
 }
 
 // NewServer creates and starts a new IPC server.
-func NewServer(source proxy.FlowSource, port int) (*Server, error) {
+func NewServer(source proxy.FlowProvider, port int) (*Server, error) {
 	sockPath := SocketPath(port)
 
 	// Clean up any stale socket

@@ -1,11 +1,6 @@
 package config
 
-import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strconv"
-)
+import "path/filepath"
 
 const mapLocalFile = "maplocal.jsonc"
 
@@ -18,9 +13,21 @@ type MapLocalEntry struct {
 	ContentType string `json:"contentType,omitempty"` // optional, auto-detect if empty
 }
 
-// MapLocalConfig represents the map local configuration
-type MapLocalConfig struct {
-	Mappings []MapLocalEntry `json:"mappings"`
+func (e MapLocalEntry) GetPattern() string { return e.Pattern }
+func (e MapLocalEntry) GetEnabled() bool   { return e.Enabled }
+
+var mapLocalStore = ConfigStore[MapLocalEntry]{
+	filename: mapLocalFile,
+	header: []string{
+		"// Proxy TUI Map Local",
+		"// Map remote URLs to local files",
+		"// Pattern supports wildcards: */api/users*, *example.com*",
+	},
+	wrapKey: "mappings",
+	toggleFn: func(e MapLocalEntry) MapLocalEntry {
+		e.Enabled = !e.Enabled
+		return e
+	},
 }
 
 // GetMapLocalPath returns the path to the map local file
@@ -29,154 +36,26 @@ func GetMapLocalPath() string {
 }
 
 // LoadMapLocal loads map local entries from file
-func LoadMapLocal() ([]MapLocalEntry, error) {
-	path := GetMapLocalPath()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []MapLocalEntry{}, nil
-		}
-		return nil, err
-	}
-
-	// Strip comments from JSONC
-	jsonData := stripJSONComments(data)
-
-	var config MapLocalConfig
-	if err := json.Unmarshal(jsonData, &config); err != nil {
-		return []MapLocalEntry{}, nil
-	}
-
-	return config.Mappings, nil
-}
+func LoadMapLocal() ([]MapLocalEntry, error) { return mapLocalStore.Load() }
 
 // SaveMapLocal saves map local entries to file
-func SaveMapLocal(mappings []MapLocalEntry) error {
-	dir := GetConfigDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
-
-	path := GetMapLocalPath()
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	// Write JSONC with comments
-	file.WriteString("{\n")
-	file.WriteString("  // Proxy TUI Map Local\n")
-	file.WriteString("  // Map remote URLs to local files\n")
-	file.WriteString("  // Pattern supports wildcards: */api/users*, *example.com*\n")
-	file.WriteString("  \"mappings\": [\n")
-
-	for i, m := range mappings {
-		comma := ","
-		if i == len(mappings)-1 {
-			comma = ""
-		}
-
-		statusCode := m.StatusCode
-		if statusCode == 0 {
-			statusCode = 200
-		}
-
-		entry := "    {"
-		entry += "\"pattern\": \"" + escapeJSON(m.Pattern) + "\", "
-		entry += "\"localPath\": \"" + escapeJSON(m.LocalPath) + "\", "
-		entry += "\"enabled\": " + boolToString(m.Enabled)
-		if m.StatusCode != 0 && m.StatusCode != 200 {
-			entry += ", \"statusCode\": " + intToString(m.StatusCode)
-		}
-		if m.ContentType != "" {
-			entry += ", \"contentType\": \"" + escapeJSON(m.ContentType) + "\""
-		}
-		entry += "}" + comma + "\n"
-		file.WriteString(entry)
-	}
-
-	file.WriteString("  ]\n")
-	file.WriteString("}\n")
-
-	return nil
-}
-
-// intToString converts int to string
-func intToString(i int) string {
-	return strconv.Itoa(i)
-}
+func SaveMapLocal(mappings []MapLocalEntry) error { return mapLocalStore.Save(mappings) }
 
 // AddMapLocalEntry adds a mapping and saves
 func AddMapLocalEntry(entry MapLocalEntry) error {
-	mappings, err := LoadMapLocal()
-	if err != nil {
-		mappings = []MapLocalEntry{}
-	}
-
-	// Check if pattern already exists
-	for _, m := range mappings {
-		if m.Pattern == entry.Pattern {
-			return nil
-		}
-	}
-
 	if entry.StatusCode == 0 {
 		entry.StatusCode = 200
 	}
-
-	mappings = append(mappings, entry)
-	return SaveMapLocal(mappings)
+	return mapLocalStore.Add(entry)
 }
 
 // RemoveMapLocalEntry removes a mapping and saves
-func RemoveMapLocalEntry(pattern string) error {
-	mappings, err := LoadMapLocal()
-	if err != nil {
-		return err
-	}
-
-	var newMappings []MapLocalEntry
-	for _, m := range mappings {
-		if m.Pattern != pattern {
-			newMappings = append(newMappings, m)
-		}
-	}
-
-	return SaveMapLocal(newMappings)
-}
+func RemoveMapLocalEntry(pattern string) error { return mapLocalStore.Remove(pattern) }
 
 // ToggleMapLocalEntry toggles the enabled state of a mapping
-func ToggleMapLocalEntry(pattern string) error {
-	mappings, err := LoadMapLocal()
-	if err != nil {
-		return err
-	}
-
-	for i, m := range mappings {
-		if m.Pattern == pattern {
-			mappings[i].Enabled = !m.Enabled
-			break
-		}
-	}
-
-	return SaveMapLocal(mappings)
-}
+func ToggleMapLocalEntry(pattern string) error { return mapLocalStore.Toggle(pattern) }
 
 // UpdateMapLocalEntry updates a mapping
 func UpdateMapLocalEntry(pattern string, entry MapLocalEntry) error {
-	mappings, err := LoadMapLocal()
-	if err != nil {
-		return err
-	}
-
-	for i, m := range mappings {
-		if m.Pattern == pattern {
-			mappings[i] = entry
-			break
-		}
-	}
-
-	return SaveMapLocal(mappings)
+	return mapLocalStore.Update(pattern, entry)
 }

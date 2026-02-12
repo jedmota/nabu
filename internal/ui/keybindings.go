@@ -42,6 +42,16 @@ const (
 	ActionMapRemote      Action = "map_remote"
 	ActionAddMapRemote   Action = "add_map_remote"
 
+	// Flow actions
+	ActionReplay    Action = "replay"
+	ActionCopyCURL  Action = "copy_curl"
+	ActionExportHAR    Action = "export_har"
+	ActionExportAllHAR Action = "export_all_har"
+	ActionImportHAR    Action = "import_har"
+
+	// Alert actions
+	ActionAlerts Action = "alerts"
+
 	// Detail actions
 	ActionToggleRaw  Action = "toggle_raw"
 	ActionScrollUp   Action = "scroll_up"
@@ -95,6 +105,12 @@ func NewKeyBindings() *KeyBindings {
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'L', Context: ContextList, Action: ActionMapLocal, Description: "Map local manager"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'l', Context: ContextList, Action: ActionQuickMapLocal, Description: "Map selected to local"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'R', Context: ContextList, Action: ActionMapRemote, Description: "Map remote manager"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'p', Context: ContextList, Action: ActionReplay, Description: "Replay request"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'x', Context: ContextList, Action: ActionCopyCURL, Description: "Copy as cURL"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'e', Context: ContextList, Action: ActionExportHAR, Description: "Export selected as HAR"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'E', Context: ContextList, Action: ActionExportAllHAR, Description: "Export all as HAR"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'i', Context: ContextList, Action: ActionImportHAR, Description: "Import HAR file"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'a', Context: ContextList, Action: ActionAlerts, Description: "Alert settings"})
 
 	// Detail bindings
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'T', Context: ContextDetail, Action: ActionToggleRaw, Description: "Toggle raw/pretty"})
@@ -111,6 +127,10 @@ func NewKeyBindings() *KeyBindings {
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'L', Context: ContextDetail, Action: ActionMapLocal, Description: "Map local manager"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'r', Context: ContextDetail, Action: ActionAddMapRemote, Description: "Add map remote rule"})
 	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'R', Context: ContextDetail, Action: ActionMapRemote, Description: "Map remote manager"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'p', Context: ContextDetail, Action: ActionReplay, Description: "Replay request"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'x', Context: ContextDetail, Action: ActionCopyCURL, Description: "Copy as cURL"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'e', Context: ContextDetail, Action: ActionExportHAR, Description: "Export selected as HAR"})
+	kb.Add(KeyBinding{Key: tcell.KeyRune, Rune: 'E', Context: ContextDetail, Action: ActionExportAllHAR, Description: "Export all as HAR"})
 
 	return kb
 }

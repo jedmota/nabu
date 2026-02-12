@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"proxy-tui/internal/config"
 	"proxy-tui/internal/model"
 	"proxy-tui/internal/proxy"
 )
@@ -46,7 +47,7 @@ func newTestVM(t *testing.T) (*ViewModel, *mockFlowSource) {
 	t.Setenv("HOME", t.TempDir())
 
 	src := newMockFlowSource()
-	vm := New(src)
+	vm := New(src, config.DefaultPersistence{})
 	return vm, src
 }
 

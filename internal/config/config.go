@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"proxy-tui/internal/util"
 )
 
 const (
@@ -45,47 +47,6 @@ func GetWhitelistPath() string {
 	return filepath.Join(GetConfigDir(), whitelistFile)
 }
 
-// stripJSONComments removes // and /* */ comments from JSONC
-// It properly handles comment-like sequences inside JSON strings
-func stripJSONComments(data []byte) []byte {
-	var result strings.Builder
-	lines := strings.Split(string(data), "\n")
-
-	for _, line := range lines {
-		// Process character by character to properly track string state
-		inString := false
-		i := 0
-		for i < len(line) {
-			c := line[i]
-
-			// Track string boundaries (handle escaped quotes)
-			if c == '"' && (i == 0 || line[i-1] != '\\') {
-				inString = !inString
-				result.WriteByte(c)
-				i++
-				continue
-			}
-
-			// Only process comments when not inside a string
-			if !inString {
-				// Check for line comment //
-				if c == '/' && i+1 < len(line) && line[i+1] == '/' {
-					// Skip rest of line
-					break
-				}
-				// Check for block comment /* - skip for now, just treat // as comments
-				// Block comments spanning lines are rare in JSONC config files
-			}
-
-			result.WriteByte(c)
-			i++
-		}
-		result.WriteString("\n")
-	}
-
-	return []byte(result.String())
-}
-
 // LoadWhitelist loads whitelist patterns from file
 func LoadWhitelist() ([]WhitelistPattern, error) {
 	path := GetWhitelistPath()
@@ -99,7 +60,7 @@ func LoadWhitelist() ([]WhitelistPattern, error) {
 	}
 
 	// Strip comments from JSONC
-	jsonData := stripJSONComments(data)
+	jsonData := util.StripJSONComments(data)
 
 	var config WhitelistConfig
 	if err := json.Unmarshal(jsonData, &config); err != nil {

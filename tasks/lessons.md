@@ -6,5 +6,8 @@
 ## Duplication drifts silently
 `matchGlob` in `proxy.go` and `matchGlobPattern` in `model/mapping.go` implement the same logic with slightly different names and minor differences (e.g. `?` wildcard support). Same for `stripJSONComments` in two packages. Duplication that starts as "just a quick copy" becomes a maintenance liability as the copies evolve independently.
 
+## Generics work well for config store deduplication
+`maplocal.go` (182 lines) and `mapremote.go` (160 lines) had 85% structural duplication. Extracting a `ConfigStore[E ConfigEntry]` generic reduced them to ~60 lines each (entry struct + thin wrappers) while consolidating Load/Save/Add/Remove/Toggle/Update into a single `store.go` (162 lines). The `ConfigEntry` interface only needs `GetPattern()` and `GetEnabled()` — keep the constraint surface minimal.
+
 ## License compliance matters for binary distribution
 Source distribution via Go modules is implicitly compliant (each module carries its LICENSE). Binary distribution is not — BSD-3-Clause and Apache-2.0 require bundling copyright notices with binaries. A `THIRD_PARTY_NOTICES` file and updating the release script fixed this.

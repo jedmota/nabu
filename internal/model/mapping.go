@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"proxy-tui/internal/util"
 )
 
 // MapRuleType defines the type of mapping
@@ -13,6 +15,24 @@ const (
 	MapLocal MapRuleType = iota
 	MapRemote
 )
+
+// Default priorities for rule types.
+// Higher value = checked first by FindMatch.
+const (
+	PriorityMapLocal  = 100
+	PriorityMapRemote = 50
+)
+
+func defaultPriority(t MapRuleType) int {
+	switch t {
+	case MapLocal:
+		return PriorityMapLocal
+	case MapRemote:
+		return PriorityMapRemote
+	default:
+		return 0
+	}
+}
 
 // MapRule defines a URL mapping rule
 type MapRule struct {
@@ -24,6 +44,7 @@ type MapRule struct {
 	Replacement string         // Local path or remote URL
 	StatusCode  int            // HTTP status code (default 200)
 	ContentType string         // Content-Type header (auto-detect if empty)
+	Priority    int            // Higher priority rules are matched first
 	compiled    *regexp.Regexp // compiled pattern for regex matching
 }
 
@@ -35,6 +56,7 @@ func NewMapRule(ruleType MapRuleType, pattern, replacement string) *MapRule {
 		Pattern:     pattern,
 		Replacement: replacement,
 		StatusCode:  200,
+		Priority:    defaultPriority(ruleType),
 	}
 	rule.compile()
 	return rule
@@ -49,6 +71,7 @@ func NewMapLocalRule(pattern, localPath string, statusCode int, contentType stri
 		Replacement: localPath,
 		StatusCode:  statusCode,
 		ContentType: contentType,
+		Priority:    PriorityMapLocal,
 	}
 	if rule.StatusCode == 0 {
 		rule.StatusCode = 200
@@ -64,6 +87,7 @@ func NewMapRemoteRule(pattern, remoteURL string) *MapRule {
 		Enabled:     true,
 		Pattern:     pattern,
 		Replacement: remoteURL,
+		Priority:    PriorityMapRemote,
 	}
 	rule.compile()
 	return rule
@@ -163,7 +187,7 @@ func (r *MapRule) Match(url string) bool {
 
 	// Glob pattern with *
 	if strings.Contains(pattern, "*") {
-		return matchGlobPattern(url, pattern)
+		return util.MatchGlob(url, pattern)
 	}
 
 	// Exact match (with optional trailing slash)
@@ -180,31 +204,6 @@ func (r *MapRule) Match(url string) bool {
 	}
 
 	return false
-}
-
-// matchGlobPattern matches a URL against a glob pattern
-func matchGlobPattern(url, pattern string) bool {
-	// Convert glob to regex
-	regexPattern := "^"
-	for _, c := range pattern {
-		switch c {
-		case '*':
-			regexPattern += ".*"
-		case '?':
-			regexPattern += "."
-		case '.', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|', '\\':
-			regexPattern += "\\" + string(c)
-		default:
-			regexPattern += string(c)
-		}
-	}
-	regexPattern += "$"
-
-	re, err := regexp.Compile(regexPattern)
-	if err != nil {
-		return false
-	}
-	return re.MatchString(url)
 }
 
 // Apply returns the replacement URL for a matched URL
@@ -268,24 +267,19 @@ func (s *MapRuleStore) Toggle(id int) {
 	}
 }
 
-// FindMatch finds the first matching rule for a URL
-// Map Local rules are always checked first, then Map Remote rules
+// FindMatch finds the highest-priority matching rule for a URL.
+// Rules with higher Priority values are preferred. Among rules with equal
+// priority, the first one added wins (stable, insertion-order tiebreak).
 func (s *MapRuleStore) FindMatch(url string) *MapRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	// First pass: check Map Local rules
+	var best *MapRule
 	for _, r := range s.rules {
-		if r.Type == MapLocal && r.Match(url) {
-			return r
+		if r.Match(url) && (best == nil || r.Priority > best.Priority) {
+			best = r
 		}
 	}
-	// Second pass: check Map Remote rules
-	for _, r := range s.rules {
-		if r.Type == MapRemote && r.Match(url) {
-			return r
-		}
-	}
-	return nil
+	return best
 }
 
 // All returns all rules
