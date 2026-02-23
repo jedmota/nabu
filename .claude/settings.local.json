@@ -16,7 +16,8 @@
       "Bash(go list:*)",
       "Bash(make test:*)",
       "Bash(find:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(go mod graph:*)"
     ]
   }
 }

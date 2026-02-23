@@ -200,6 +200,13 @@ func (p *Proxy) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.R
 			}
 
 			if resp != nil {
+				// Mark flow as mapped
+				switch rule.Type {
+				case model.MapLocal:
+					flow.Mapped = "local"
+				case model.MapRemote:
+					flow.Mapped = "remote"
+				}
 				// Update flow with the mapped response
 				flow.Response = &model.Response{
 					StatusCode: resp.StatusCode,

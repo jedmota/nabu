@@ -6,6 +6,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"proxy-tui/internal/debug"
 	"proxy-tui/internal/model"
 	"proxy-tui/internal/viewmodel"
 )
@@ -73,8 +74,8 @@ func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
 
 // setHeader sets up the table header
 func (rp *RequestsPanel) setHeader() {
-	headers := []string{"Time", "Method", "Host", "Path", "Code", "Dur", "*"}
-	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth, 1}
+	headers := []string{"Time", "Method", "Host", "Path", "Code", "Dur", "*", "M"}
+	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth, 1, 1}
 
 	for i, header := range headers {
 		cell := tview.NewTableCell(header).
@@ -118,7 +119,6 @@ func (rp *RequestsPanel) updateTitle() {
 
 // Refresh updates the table with current flows
 func (rp *RequestsPanel) Refresh() {
-	fmt.Println("Refresh")
 	flows := rp.viewModel.GetFilteredFlows()
 
 	// Clear existing rows (except header)
@@ -129,7 +129,8 @@ func (rp *RequestsPanel) Refresh() {
 
 	// Calculate path width once for all rows
 	_, _, width, _ := rp.GetInnerRect()
-	fmt.Println("Width:", width)
+	width = 113
+	debug.Log("width: %d", width)
 	if width == 0 {
 		width = 120 // default fallback before first render
 	}
@@ -280,6 +281,21 @@ func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow, pathMaxWidth int)
 	}
 	rp.SetCell(row, 6, tview.NewTableCell(starText).
 		SetTextColor(tcell.ColorYellow).
+		SetMaxWidth(1))
+
+	// Mapped indicator column
+	mappedText := ""
+	mappedColor := tcell.ColorWhite
+	switch flow.Mapped {
+	case "local":
+		mappedText = "L"
+		mappedColor = tcell.ColorAqua
+	case "remote":
+		mappedText = "R"
+		mappedColor = tcell.ColorFuchsia
+	}
+	rp.SetCell(row, 7, tview.NewTableCell(mappedText).
+		SetTextColor(mappedColor).
 		SetMaxWidth(1))
 }
 
