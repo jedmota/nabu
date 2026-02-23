@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"proxy-tui/internal/config"
+	"proxy-tui/internal/debug"
 	"proxy-tui/internal/ipc"
 	"proxy-tui/internal/proxy"
 	"proxy-tui/internal/ui"
@@ -65,6 +66,12 @@ func main() {
 	rmMapRemote := flag.Int("rm-map-remote", 0, "Remove map-remote rule by ID and exit")
 
 	flag.Parse()
+
+	// Start debug logger (best-effort; failure is non-fatal)
+	if err := debug.Init(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: debug log unavailable: %v\n", err)
+	}
+	defer debug.Close()
 
 	// Handle --list-* flags (print and exit)
 	if *listWhitelist {

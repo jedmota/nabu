@@ -17,6 +17,7 @@ type Flow struct {
 	EndTime   time.Time `json:"end_time"`
 	Error     error     `json:"-"`
 	Tunneled  bool      `json:"tunneled,omitempty"`
+	Mapped    string    `json:"mapped,omitempty"` // "local", "remote", or "" if not mapped
 }
 
 // Duration returns the time taken for the flow

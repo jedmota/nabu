@@ -102,14 +102,19 @@ Single source of truth for each. Update all call sites.
 
 ### 4.1 Replay requests
 - [x] Added `ReplayFlow` method in `viewmodel/replay.go` — sends request through proxy via HTTP transport
-- [x] Keybinding `p` in both list and detail contexts
+- [x] Keybinding `.` in both list and detail contexts
 - [x] Status bar feedback: "Replaying request..." → "Request replayed" / error
 
-### 4.2 Export flows
+### 4.2 Export / Import flows
 - [x] `FormatCURL` in `viewmodel/export.go` — generates cURL command with headers, body, method
 - [x] `FormatHAR` in `viewmodel/export.go` — generates HAR 1.2 JSON for one or more flows
-- [x] Keybinding `x` → copy cURL to clipboard (xclip/xsel/wl-copy/pbcopy)
-- [x] Keybinding `e` → export selected flow (or all filtered) as HAR to temp file
+- [x] `ParseHAR` in `viewmodel/export.go` — parses HAR JSON back to `[]*model.Flow`
+- [x] Keybinding `x` → copy cURL to clipboard (wl-copy/pbcopy/xclip/xsel)
+- [x] Keybinding `e` → export selected flow as HAR, `E` → export all filtered flows as HAR
+- [x] Keybinding `i` → import HAR file with file picker (`ui/filepicker.go`)
+- [x] File picker: real-time directory listing that filters as you type, Tab completion, `~` expansion
+- [x] `ImportFlows` uses `AddDirect` to bypass pause state
+- [x] Round-trip tests in `viewmodel/export_test.go` (export → import → verify)
 
 ### 4.3 Alerts
 - [x] `AlertRule` model (`model/alert.go`) — `status_code` (match by class, e.g. 5xx) and `latency` (ms threshold)
@@ -117,6 +122,28 @@ Single source of truth for each. Update all call sites.
 - [x] ViewModel integration (`viewmodel/alerts.go`) — `CheckAlerts`, `ToggleAlertRule`, `GetAlertRules`, `SetAlertRules`
 - [x] Visual indicator `!` prefix on status column in requests panel when alert matches
 - [x] Alert manager UI (`ui/alerts.go`) — keybinding `a`, toggle rules with Enter/Space
+
+### 4.4 Star flows
+- [x] `ToggleStar`, `StarFlows`, `IsStarred`, `StarredCount` methods on ViewModel
+- [x] `FilterStarred` filter type in `model/filter.go` — only shows starred flows
+- [x] `StarredIDs` map on `FilterState`, checked in `Match`
+- [x] Keybinding `s` → toggle star on selected flow, `S` → star all listed flows
+- [x] Keybinding `3` → filter to show only starred flows
+- [x] Yellow `*` indicator in dedicated column at end of each row
+- [x] Filter bar updated: `1:All  2:Whitelist  3:Starred  /:Custom`
+
+### 4.5 Pause / Resume
+- [x] `SetPaused` / `IsPaused` on FlowStore (atomic flag)
+- [x] `Add` and `Update` are no-ops when paused — no flows recorded
+- [x] Map-local and map-remote rules bypassed when paused — pure passthrough
+- [x] `AddDirect` method bypasses pause (used by HAR import)
+- [x] Keybinding `p` → toggle pause/resume
+- [x] Red `PAUSED` label in Requests panel title bar
+
+### 4.6 Bug fixes
+- [x] Fixed clipboard on Wayland — reordered to try `wl-copy` first
+- [x] Fixed data race in `FlowStore.emit()` — hold `subMu` lock while sending
+- [x] Fixed HAR import setting host with port — use `u.Hostname()` instead of `u.Host`
 
 ---
 
