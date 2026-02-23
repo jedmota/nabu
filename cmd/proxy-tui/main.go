@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"proxy-tui/internal/config"
 	"proxy-tui/internal/debug"
 	"proxy-tui/internal/ipc"
@@ -247,24 +249,20 @@ func runPrimary(port int, bind string, verbose, headless bool, certificate *ca.C
 	}
 
 	// TUI mode
-	app := ui.NewApp(vm)
-
 	if err := p.StartAsync(); err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to start proxy: %v\n", err)
 		os.Exit(1)
 	}
 
-	go func() {
-		fmt.Printf("Proxy TUI starting on %s:%d...\n", bind, port)
-		fmt.Printf("CA Certificate: %s\n", certificate.CertPath())
-	}()
+	m := ui.NewModel(vm)
+	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	go func() {
 		<-sigChan
-		app.Stop()
+		prog.Quit()
 	}()
 
-	if err := app.Run(); err != nil {
+	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 	}
 
@@ -297,7 +295,8 @@ func runSecondary(port int) {
 	vm.SetSecondary(true)
 	vm.StartEventLoop()
 
-	app := ui.NewApp(vm)
+	m := ui.NewModel(vm)
+	prog := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -306,13 +305,13 @@ func runSecondary(port int) {
 	go func() {
 		select {
 		case <-adapter.Disconnected():
-			app.ShowMessage("[red]Primary instance disconnected[-]")
+			prog.Send(ui.StatusMsg{Text: "Primary instance disconnected"})
 		case <-sigChan:
-			app.Stop()
+			prog.Quit()
 		}
 	}()
 
-	if err := app.Run(); err != nil {
+	if _, err := prog.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 	}
 

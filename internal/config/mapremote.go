@@ -9,6 +9,7 @@ type MapRemoteEntry struct {
 	Pattern   string `json:"pattern"`
 	RemoteURL string `json:"remoteUrl"`
 	Enabled   bool   `json:"enabled"`
+	Method    string `json:"method,omitempty"` // optional, empty = match all
 }
 
 func (e MapRemoteEntry) GetPattern() string { return e.Pattern }
