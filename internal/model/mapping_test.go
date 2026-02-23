@@ -70,11 +70,55 @@ func TestMapRule_Match(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.rule.Match(tt.url)
+			got := tt.rule.MatchRequest(tt.url, "GET")
 			if got != tt.want {
 				t.Errorf("Match(%q) = %v, want %v", tt.url, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMapRule_MatchRequest_MethodFilter(t *testing.T) {
+	rule := NewMapLocalRule("http://example.com/api", "/tmp/f", 200, "", "GET")
+
+	if !rule.MatchRequest("http://example.com/api", "GET") {
+		t.Error("should match GET")
+	}
+	if rule.MatchRequest("http://example.com/api", "POST") {
+		t.Error("should not match POST when method is GET")
+	}
+	if rule.MatchRequest("http://example.com/api", "PUT") {
+		t.Error("should not match PUT when method is GET")
+	}
+
+	// Empty method = match all
+	ruleAll := NewMapLocalRule("http://example.com/api", "/tmp/f", 200, "", "")
+	if !ruleAll.MatchRequest("http://example.com/api", "GET") {
+		t.Error("empty method should match GET")
+	}
+	if !ruleAll.MatchRequest("http://example.com/api", "POST") {
+		t.Error("empty method should match POST")
+	}
+}
+
+func TestFindMatch_MethodFilter(t *testing.T) {
+	store := NewMapRuleStore()
+	store.Add(NewMapLocalRule("http://example.com/api", "/tmp/get", 200, "", "GET"))
+	store.Add(NewMapLocalRule("http://example.com/api", "/tmp/post", 200, "", "POST"))
+
+	match := store.FindMatch("http://example.com/api", "GET")
+	if match == nil || match.Replacement != "/tmp/get" {
+		t.Error("should match GET rule")
+	}
+
+	match = store.FindMatch("http://example.com/api", "POST")
+	if match == nil || match.Replacement != "/tmp/post" {
+		t.Error("should match POST rule")
+	}
+
+	match = store.FindMatch("http://example.com/api", "DELETE")
+	if match != nil {
+		t.Error("should not match DELETE when only GET and POST rules exist")
 	}
 }
 
@@ -219,7 +263,7 @@ func TestMapRuleStore_FindMatch(t *testing.T) {
 	store.Add(local)
 
 	// MapLocal should win even though it was added second
-	match := store.FindMatch("http://example.com/path")
+	match := store.FindMatch("http://example.com/path", "GET")
 	if match == nil {
 		t.Fatal("FindMatch returned nil")
 	}
@@ -228,7 +272,7 @@ func TestMapRuleStore_FindMatch(t *testing.T) {
 	}
 
 	// No match
-	if store.FindMatch("http://other.example.com/path") != nil {
+	if store.FindMatch("http://other.example.com/path", "GET") != nil {
 		t.Error("FindMatch should return nil for non-matching URL")
 	}
 }
@@ -251,7 +295,7 @@ func TestMapRuleStore_Concurrent(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			store.FindMatch("http://example.com/path")
+			store.FindMatch("http://example.com/path", "GET")
 		}()
 	}
 	wg.Wait()
@@ -270,7 +314,7 @@ func TestNewMapRule(t *testing.T) {
 }
 
 func TestNewMapLocalRule(t *testing.T) {
-	r := NewMapLocalRule("p", "/tmp/f", 0, "")
+	r := NewMapLocalRule("p", "/tmp/f", 0, "", "")
 	if r.Type != MapLocal {
 		t.Error("type should be MapLocal")
 	}
@@ -283,7 +327,7 @@ func TestNewMapLocalRule(t *testing.T) {
 }
 
 func TestNewMapRemoteRule(t *testing.T) {
-	r := NewMapRemoteRule("p", "http://other.com")
+	r := NewMapRemoteRule("p", "http://other.com", "")
 	if r.Type != MapRemote {
 		t.Error("type should be MapRemote")
 	}

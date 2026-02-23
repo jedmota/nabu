@@ -11,6 +11,7 @@ type MapLocalEntry struct {
 	Enabled     bool   `json:"enabled"`
 	StatusCode  int    `json:"statusCode,omitempty"`  // optional, default 200
 	ContentType string `json:"contentType,omitempty"` // optional, auto-detect if empty
+	Method      string `json:"method,omitempty"`      // optional, empty = match all
 }
 
 func (e MapLocalEntry) GetPattern() string { return e.Pattern }

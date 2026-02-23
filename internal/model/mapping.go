@@ -40,6 +40,7 @@ type MapRule struct {
 	Type        MapRuleType
 	Enabled     bool
 	Name        string
+	Method      string         // HTTP method filter (empty = match all)
 	Pattern     string         // URL pattern to match
 	Replacement string         // Local path or remote URL
 	StatusCode  int            // HTTP status code (default 200)
@@ -63,10 +64,11 @@ func NewMapRule(ruleType MapRuleType, pattern, replacement string) *MapRule {
 }
 
 // NewMapLocalRule creates a new map local rule with all options
-func NewMapLocalRule(pattern, localPath string, statusCode int, contentType string) *MapRule {
+func NewMapLocalRule(pattern, localPath string, statusCode int, contentType string, method string) *MapRule {
 	rule := &MapRule{
 		Type:        MapLocal,
 		Enabled:     true,
+		Method:      strings.ToUpper(method),
 		Pattern:     pattern,
 		Replacement: localPath,
 		StatusCode:  statusCode,
@@ -81,10 +83,11 @@ func NewMapLocalRule(pattern, localPath string, statusCode int, contentType stri
 }
 
 // NewMapRemoteRule creates a new map remote rule
-func NewMapRemoteRule(pattern, remoteURL string) *MapRule {
+func NewMapRemoteRule(pattern, remoteURL, method string) *MapRule {
 	rule := &MapRule{
 		Type:        MapRemote,
 		Enabled:     true,
+		Method:      strings.ToUpper(method),
 		Pattern:     pattern,
 		Replacement: remoteURL,
 		Priority:    PriorityMapRemote,
@@ -173,9 +176,13 @@ func (r *MapRule) compile() {
 	}
 }
 
-// Match checks if a URL matches this rule
-func (r *MapRule) Match(url string) bool {
+// MatchRequest checks if a URL and method match this rule
+func (r *MapRule) MatchRequest(url, method string) bool {
 	if !r.Enabled {
+		return false
+	}
+	// Check method filter (empty = match all)
+	if r.Method != "" && !strings.EqualFold(r.Method, method) {
 		return false
 	}
 	if r.compiled != nil {
@@ -267,15 +274,15 @@ func (s *MapRuleStore) Toggle(id int) {
 	}
 }
 
-// FindMatch finds the highest-priority matching rule for a URL.
+// FindMatch finds the highest-priority matching rule for a URL and method.
 // Rules with higher Priority values are preferred. Among rules with equal
 // priority, the first one added wins (stable, insertion-order tiebreak).
-func (s *MapRuleStore) FindMatch(url string) *MapRule {
+func (s *MapRuleStore) FindMatch(url, method string) *MapRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var best *MapRule
 	for _, r := range s.rules {
-		if r.Match(url) && (best == nil || r.Priority > best.Priority) {
+		if r.MatchRequest(url, method) && (best == nil || r.Priority > best.Priority) {
 			best = r
 		}
 	}

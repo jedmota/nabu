@@ -1,13 +1,15 @@
 package viewmodel
 
 import (
+	"strings"
+
 	"proxy-tui/internal/config"
 	"proxy-tui/internal/model"
 )
 
 // AddMapLocalRule adds a map local rule
-func (vm *ViewModel) AddMapLocalRule(pattern, localPath string, statusCode int, contentType string) {
-	rule := model.NewMapLocalRule(pattern, localPath, statusCode, contentType)
+func (vm *ViewModel) AddMapLocalRule(pattern, localPath string, statusCode int, contentType, method string) {
+	rule := model.NewMapLocalRule(pattern, localPath, statusCode, contentType, method)
 	vm.source.MapRules().Add(rule)
 
 	// Save to config
@@ -17,6 +19,7 @@ func (vm *ViewModel) AddMapLocalRule(pattern, localPath string, statusCode int, 
 		Enabled:     true,
 		StatusCode:  statusCode,
 		ContentType: contentType,
+		Method:      strings.ToUpper(method),
 	})
 	vm.notifyConfigChange()
 }
@@ -61,15 +64,15 @@ func (vm *ViewModel) LoadMapLocalRules() {
 	}
 
 	for _, e := range entries {
-		rule := model.NewMapLocalRule(e.Pattern, e.LocalPath, e.StatusCode, e.ContentType)
+		rule := model.NewMapLocalRule(e.Pattern, e.LocalPath, e.StatusCode, e.ContentType, e.Method)
 		rule.Enabled = e.Enabled
 		vm.source.MapRules().Add(rule)
 	}
 }
 
 // AddMapRemoteRule adds a map remote rule
-func (vm *ViewModel) AddMapRemoteRule(pattern, remoteURL string) {
-	rule := model.NewMapRemoteRule(pattern, remoteURL)
+func (vm *ViewModel) AddMapRemoteRule(pattern, remoteURL, method string) {
+	rule := model.NewMapRemoteRule(pattern, remoteURL, method)
 	vm.source.MapRules().Add(rule)
 
 	// Save to config
@@ -77,6 +80,7 @@ func (vm *ViewModel) AddMapRemoteRule(pattern, remoteURL string) {
 		Pattern:   pattern,
 		RemoteURL: remoteURL,
 		Enabled:   true,
+		Method:    strings.ToUpper(method),
 	})
 	vm.notifyConfigChange()
 }
@@ -119,7 +123,7 @@ func (vm *ViewModel) GetMapRemoteRuleByID(id int) *model.MapRule {
 }
 
 // UpdateMapRemoteRule updates an existing map remote rule
-func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL string) {
+func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL, method string) {
 	oldRule := vm.source.MapRules().GetByID(id)
 	if oldRule == nil {
 		return
@@ -129,7 +133,7 @@ func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL string) {
 	enabled := oldRule.Enabled
 
 	// Create a new rule to ensure pattern is properly compiled
-	newRule := model.NewMapRemoteRule(pattern, remoteURL)
+	newRule := model.NewMapRemoteRule(pattern, remoteURL, method)
 	newRule.ID = id
 	newRule.Enabled = enabled
 	vm.source.MapRules().Update(newRule)
@@ -139,6 +143,7 @@ func (vm *ViewModel) UpdateMapRemoteRule(id int, pattern, remoteURL string) {
 		Pattern:   pattern,
 		RemoteURL: remoteURL,
 		Enabled:   enabled,
+		Method:    strings.ToUpper(method),
 	})
 	vm.notifyConfigChange()
 }
@@ -151,7 +156,7 @@ func (vm *ViewModel) LoadMapRemoteRules() {
 	}
 
 	for _, e := range entries {
-		rule := model.NewMapRemoteRule(e.Pattern, e.RemoteURL)
+		rule := model.NewMapRemoteRule(e.Pattern, e.RemoteURL, e.Method)
 		rule.Enabled = e.Enabled
 		vm.source.MapRules().Add(rule)
 	}

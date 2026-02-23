@@ -189,7 +189,7 @@ func (p *Proxy) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.R
 
 	// Check for mapping rules (skip when paused — full bypass)
 	if !p.flowStore.IsPaused() {
-		if rule := p.mapRules.FindMatch(fullURL); rule != nil {
+		if rule := p.mapRules.FindMatch(fullURL, req.Method); rule != nil {
 			var resp *http.Response
 
 			switch rule.Type {

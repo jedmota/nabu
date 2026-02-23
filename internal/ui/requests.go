@@ -2,354 +2,363 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/gdamore/tcell/v2"
-	"github.com/rivo/tview"
+	"github.com/charmbracelet/lipgloss"
 
-	"proxy-tui/internal/debug"
 	"proxy-tui/internal/model"
 	"proxy-tui/internal/viewmodel"
 )
 
-// Column width constants (fixed columns - must be fully visible)
+// Column widths (fixed columns)
 const (
 	colTimeWidth   = 12 // HH:MM:SS.mmm
 	colMethodWidth = 8  // DELETE/TUNNEL is longest
-	colHostWidth   = 25 // reasonable host width
-	colStatusWidth = 5  // 3 digits or ERR
-	colDurWidth    = 10 // e.g., "123ms" or "1.23s"
+	colHostWidth   = 25
+	colStatusWidth = 5
+	colDurWidth    = 10
+	colStarWidth   = 1
+	colMapWidth    = 1
+	colPadding     = 7 // spaces between columns
 )
 
-// RequestsPanel shows the list of HTTP requests
-type RequestsPanel struct {
-	*tview.Table
-	viewModel      *viewmodel.ViewModel
-	onSelect       func(flow *model.Flow)
+// RequestListModel manages the requests table rendering.
+type RequestListModel struct {
+	vm             *viewmodel.ViewModel
+	cursor         int // index into displayed rows (0-based, rows are newest-first)
+	offset         int // scroll offset
+	width, height  int
 	selectedFlowID model.FlowID
 	stayOnTop      bool
 }
 
-// NewRequestsPanel creates a new requests panel
-func NewRequestsPanel(vm *viewmodel.ViewModel) *RequestsPanel {
-	table := tview.NewTable()
-	table.SetBorders(false)
-	table.SetSelectable(true, false)
-	table.SetFixed(1, 0) // Fixed header row
-	table.SetBorder(true)
-	table.SetTitle(" Requests ")
-	table.SetTitleAlign(tview.AlignLeft)
-
-	rp := &RequestsPanel{
-		Table:     table,
-		viewModel: vm,
-		stayOnTop: true, // Start with stay on top enabled
+// NewRequestListModel creates a new request list.
+func NewRequestListModel(vm *viewmodel.ViewModel) RequestListModel {
+	return RequestListModel{
+		vm:        vm,
+		stayOnTop: true,
 	}
+}
 
-	// Set up header
-	rp.setHeader()
+func (r *RequestListModel) SetSize(w, h int) {
+	r.width = w
+	r.height = h
+}
 
-	// Set selection changed handler
-	table.SetSelectionChangedFunc(func(row, column int) {
-		if row > 0 { // Skip header
-			// Disable stay on top if user navigates away from top
-			if row != 1 && rp.stayOnTop {
-				rp.stayOnTop = false
-				rp.updateTitle()
-			}
-			flows := vm.GetFilteredFlows()
-			// Reverse index: row 1 = last flow (newest)
-			flowIdx := len(flows) - row
-			if flowIdx >= 0 && flowIdx < len(flows) {
-				rp.selectedFlowID = flows[flowIdx].ID
-				vm.SelectFlow(flowIdx)
-				if rp.onSelect != nil {
-					rp.onSelect(flows[flowIdx])
-				}
-			}
+// visibleRows returns the number of rows that fit in the viewport (excluding header).
+func (r *RequestListModel) visibleRows() int {
+	return r.height - 1 // 1 for header
+}
+
+// flowCount returns the number of filtered flows.
+func (r *RequestListModel) flowCount() int {
+	return len(r.vm.GetFilteredFlows())
+}
+
+// MoveUp moves cursor up.
+func (r *RequestListModel) MoveUp() {
+	if r.cursor > 0 {
+		r.cursor--
+		if r.stayOnTop && r.cursor != 0 {
+			r.stayOnTop = false
 		}
-	})
-
-	return rp
+	}
+	r.ensureVisible()
+	r.syncSelection()
 }
 
-// setHeader sets up the table header
-func (rp *RequestsPanel) setHeader() {
-	headers := []string{"Time", "Method", "Host", "Path", "Code", "Dur", "*", "M"}
-	widths := []int{colTimeWidth, colMethodWidth, colHostWidth, 0, colStatusWidth, colDurWidth, 1, 1}
-
-	for i, header := range headers {
-		cell := tview.NewTableCell(header).
-			SetTextColor(tcell.ColorYellow).
-			SetAlign(tview.AlignLeft).
-			SetSelectable(false)
-		if widths[i] > 0 {
-			cell.SetMaxWidth(widths[i])
+// MoveDown moves cursor down.
+func (r *RequestListModel) MoveDown() {
+	count := r.flowCount()
+	if r.cursor < count-1 {
+		r.cursor++
+		if r.stayOnTop {
+			r.stayOnTop = false
 		}
-		// Path column (index 3) width is set dynamically in Refresh
-		rp.SetCell(0, i, cell)
 	}
+	r.ensureVisible()
+	r.syncSelection()
 }
 
-// updateHeaderPathWidth updates the path column header width
-func (rp *RequestsPanel) updateHeaderPathWidth(pathMaxWidth int) {
-	cell := rp.GetCell(0, 3)
-	if cell != nil {
-		cell.SetMaxWidth(pathMaxWidth)
-	}
+// GoToTop enables stay-on-top and moves to first row.
+func (r *RequestListModel) GoToTop() {
+	r.stayOnTop = true
+	r.cursor = 0
+	r.offset = 0
+	r.syncSelection()
 }
 
-// SetOnSelect sets the callback for when a flow is selected
-func (rp *RequestsPanel) SetOnSelect(fn func(flow *model.Flow)) {
-	rp.onSelect = fn
+// GoToBottom moves to last row.
+func (r *RequestListModel) GoToBottom() {
+	r.stayOnTop = false
+	count := r.flowCount()
+	if count > 0 {
+		r.cursor = count - 1
+	}
+	r.ensureVisible()
+	r.syncSelection()
 }
 
-// updateTitle updates the panel title with count and stay on top indicator
-func (rp *RequestsPanel) updateTitle() {
-	flows := rp.viewModel.GetFilteredFlows()
-	stayIndicator := ""
-	if rp.stayOnTop {
-		stayIndicator = " [yellow]⬆[-]"
-	}
-	pauseIndicator := ""
-	if rp.viewModel.IsPaused() {
-		pauseIndicator = " [red]PAUSED[-]"
-	}
-	rp.SetTitle(fmt.Sprintf(" Requests [%d/%d]%s%s ", len(flows), rp.viewModel.GetFlowCount(), pauseIndicator, stayIndicator))
-}
-
-// Refresh updates the table with current flows
-func (rp *RequestsPanel) Refresh() {
-	flows := rp.viewModel.GetFilteredFlows()
-
-	// Clear existing rows (except header)
-	rowCount := rp.GetRowCount()
-	for i := rowCount - 1; i > 0; i-- {
-		rp.RemoveRow(i)
-	}
-
-	// Calculate path width once for all rows
-	_, _, width, _ := rp.GetInnerRect()
-	width = 113
-	debug.Log("width: %d", width)
-	if width == 0 {
-		width = 120 // default fallback before first render
-	}
-	fixedWidth := colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth + 1
-	pathMaxWidth := width - fixedWidth
-	if pathMaxWidth < 10 {
-		pathMaxWidth = 10
-	}
-
-	// Update header path column width
-	rp.updateHeaderPathWidth(pathMaxWidth)
-
-	// Add flow rows in reverse order (newest first)
-	for i := len(flows) - 1; i >= 0; i-- {
-		row := len(flows) - i // row 1 = newest (last in slice)
-		rp.addFlowRow(row, flows[i], pathMaxWidth)
-	}
-
-	// Update title with count and stay on top indicator
-	rp.updateTitle()
-
-	if len(flows) == 0 {
+// OnFlowsUpdated handles a flow update.
+func (r *RequestListModel) OnFlowsUpdated() {
+	count := r.flowCount()
+	if count == 0 {
+		r.cursor = 0
+		r.offset = 0
 		return
 	}
 
-	// If stay on top is enabled, always select row 1
-	if rp.stayOnTop {
-		rp.Select(1, 0)
-		rp.selectedFlowID = flows[len(flows)-1].ID
+	if r.stayOnTop {
+		r.cursor = 0
+		r.offset = 0
+		r.syncSelection()
 		return
 	}
 
-	// Restore selection by flow ID
-	selectedRow := 0
-	if rp.selectedFlowID > 0 {
-		for i, flow := range flows {
-			if flow.ID == rp.selectedFlowID {
-				selectedRow = len(flows) - i // convert to row number
-				break
+	// Try to preserve selection by flow ID
+	if r.selectedFlowID > 0 {
+		flows := r.vm.GetFilteredFlows()
+		for i := len(flows) - 1; i >= 0; i-- {
+			displayIdx := len(flows) - 1 - i
+			if flows[i].ID == r.selectedFlowID {
+				r.cursor = displayIdx
+				r.ensureVisible()
+				r.syncSelection()
+				return
 			}
 		}
 	}
 
-	if selectedRow > 0 && selectedRow <= len(flows) {
-		rp.Select(selectedRow, 0)
-	} else {
-		rp.Select(1, 0)
-		rp.selectedFlowID = flows[len(flows)-1].ID
+	// Selection not found, clamp
+	if r.cursor >= count {
+		r.cursor = count - 1
+	}
+	r.ensureVisible()
+	r.syncSelection()
+}
+
+func (r *RequestListModel) ensureVisible() {
+	vis := r.visibleRows()
+	if vis <= 0 {
+		return
+	}
+	if r.cursor < r.offset {
+		r.offset = r.cursor
+	}
+	if r.cursor >= r.offset+vis {
+		r.offset = r.cursor - vis + 1
 	}
 }
 
-// addFlowRow adds a single flow row to the table
-func (rp *RequestsPanel) addFlowRow(row int, flow *model.Flow, pathMaxWidth int) {
-	method, host, path, status, duration := rp.viewModel.FormatFlowSummary(flow)
+func (r *RequestListModel) syncSelection() {
+	flows := r.vm.GetFilteredFlows()
+	count := len(flows)
+	if count == 0 {
+		return
+	}
+	// Display rows are newest-first: display index 0 = flows[count-1]
+	flowIdx := count - 1 - r.cursor
+	if flowIdx >= 0 && flowIdx < count {
+		r.selectedFlowID = flows[flowIdx].ID
+		r.vm.SelectFlow(flowIdx)
+	}
+}
 
-	// For tunneled flows, override display
-	if flow.Tunneled {
-		method = "TUNNEL"
-		status = "—"
-		path = "(encrypted)"
+// Title returns the panel title string.
+func (r *RequestListModel) Title() string {
+	flows := r.vm.GetFilteredFlows()
+	total := r.vm.GetFlowCount()
+	title := fmt.Sprintf("Requests %d/%d", len(flows), total)
+	if r.vm.IsPaused() {
+		title += " PAUSED"
+	}
+	if r.stayOnTop {
+		title += " ↑"
+	}
+	return title
+}
+
+// View renders the request table.
+func (r *RequestListModel) View() string {
+	if r.width <= 0 || r.height <= 0 {
+		return ""
 	}
 
-	// Timestamp column (HH:MM:SS.mmm) - fixed width
-	timestamp := flow.StartTime.Format("15:04:05.000")
-	rp.SetCell(row, 0, tview.NewTableCell(timestamp).
-		SetTextColor(tcell.ColorGray).
-		SetMaxWidth(colTimeWidth))
+	flows := r.vm.GetFilteredFlows()
+	count := len(flows)
 
-	// Method column - fixed width
-	methodColor := tcell.ColorWhite
-	if flow.Tunneled {
-		methodColor = tcell.ColorDarkGray
-	} else {
-		switch method {
-		case "GET":
-			methodColor = tcell.ColorGreen
-		case "POST":
-			methodColor = tcell.ColorBlue
-		case "PUT":
-			methodColor = tcell.ColorYellow
-		case "DELETE":
-			methodColor = tcell.ColorRed
-		case "PATCH":
-			methodColor = tcell.ColorOrange
+	// Calculate path column width (account for cursor indicator + left/right padding)
+	pad := " "
+	fixedWidth := 2 + 2 + colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth + colStarWidth + colMapWidth + colPadding
+	pathWidth := r.width - fixedWidth
+	if pathWidth < 10 {
+		pathWidth = 10
+	}
+
+	var sb strings.Builder
+
+	// Header row with subtle separator
+	header := renderHeader(pathWidth)
+	sb.WriteString(pad + header)
+	sb.WriteByte('\n')
+
+	// Rows
+	vis := r.visibleRows()
+	if vis <= 0 {
+		return sb.String()
+	}
+
+	if count == 0 {
+		// Empty state
+		emptyMsg := lipgloss.NewStyle().
+			Foreground(colorMuted).
+			Italic(true).
+			Render("  Waiting for requests...")
+		// Center it vertically
+		for i := 0; i < vis/2-1; i++ {
+			sb.WriteString(strings.Repeat(" ", r.width))
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(emptyMsg)
+		return sb.String()
+	}
+
+	for i := 0; i < vis; i++ {
+		rowIdx := r.offset + i
+		if rowIdx >= count {
+			sb.WriteString(strings.Repeat(" ", r.width))
+			if i < vis-1 {
+				sb.WriteByte('\n')
+			}
+			continue
+		}
+
+		// Display rows are newest-first: row 0 = flows[count-1]
+		flowIdx := count - 1 - rowIdx
+		flow := flows[flowIdx]
+		selected := rowIdx == r.cursor
+
+		method, host, path, status, duration := r.vm.FormatFlowSummary(flow)
+		if flow.Tunneled {
+			method = "TUNNEL"
+			status = "-"
+			path = "(encrypted)"
+		}
+
+		timestamp := flow.StartTime.Format("15:04:05.000")
+
+		// Alert indicator
+		if r.vm.CheckAlerts(flow) {
+			status = "!" + status
+		}
+
+		// Star indicator
+		star := ""
+		if r.vm.IsStarred(flow) {
+			star = "*"
+		}
+
+		// Mapped indicator
+		mapped := ""
+		switch flow.Mapped {
+		case "local":
+			mapped = "L"
+		case "remote":
+			mapped = "R"
+		}
+
+		row := renderRow(timestamp, method, host, path, status, duration, star, mapped, pathWidth, flow, selected)
+		sb.WriteString(pad + row)
+		if i < vis-1 {
+			sb.WriteByte('\n')
 		}
 	}
-	rp.SetCell(row, 1, tview.NewTableCell(method).
-		SetTextColor(methodColor).
-		SetMaxWidth(colMethodWidth))
 
-	// Host column - fixed width
-	hostColor := tcell.ColorWhite
-	if flow.Tunneled {
-		hostColor = tcell.ColorDarkGray
-	}
-	rp.SetCell(row, 2, tview.NewTableCell(host).
-		SetTextColor(hostColor).
-		SetMaxWidth(colHostWidth))
-
-	// Path column - dynamic width based on available space
-	pathColor := tcell.ColorGray
-	if flow.Tunneled {
-		pathColor = tcell.ColorDarkGray
-	}
-	// Set MaxWidth on path to prevent horizontal scroll, let tview clip visually
-	rp.SetCell(row, 3, tview.NewTableCell(path).
-		SetTextColor(pathColor).
-		SetMaxWidth(pathMaxWidth))
-
-	// Status column - fixed width, with alert indicator
-	statusColor := tcell.ColorWhite
-	if flow.Tunneled {
-		statusColor = tcell.ColorDarkGray
-	} else if flow.Response != nil {
-		switch {
-		case flow.Response.StatusCode >= 200 && flow.Response.StatusCode < 300:
-			statusColor = tcell.ColorGreen
-		case flow.Response.StatusCode >= 300 && flow.Response.StatusCode < 400:
-			statusColor = tcell.ColorYellow
-		case flow.Response.StatusCode >= 400 && flow.Response.StatusCode < 500:
-			statusColor = tcell.ColorOrange
-		case flow.Response.StatusCode >= 500:
-			statusColor = tcell.ColorRed
-		}
-	} else if flow.Error != nil {
-		statusColor = tcell.ColorRed
-	}
-	if rp.viewModel.CheckAlerts(flow) {
-		status = "!" + status
-	}
-	rp.SetCell(row, 4, tview.NewTableCell(status).
-		SetTextColor(statusColor).
-		SetMaxWidth(colStatusWidth))
-
-	// Duration column - fixed width
-	durationColor := tcell.ColorGray
-	if flow.Tunneled {
-		durationColor = tcell.ColorDarkGray
-	}
-	rp.SetCell(row, 5, tview.NewTableCell(duration).
-		SetTextColor(durationColor).
-		SetMaxWidth(colDurWidth))
-
-	// Star column
-	starText := ""
-	if rp.viewModel.IsStarred(flow) {
-		starText = "*"
-	}
-	rp.SetCell(row, 6, tview.NewTableCell(starText).
-		SetTextColor(tcell.ColorYellow).
-		SetMaxWidth(1))
-
-	// Mapped indicator column
-	mappedText := ""
-	mappedColor := tcell.ColorWhite
-	switch flow.Mapped {
-	case "local":
-		mappedText = "L"
-		mappedColor = tcell.ColorAqua
-	case "remote":
-		mappedText = "R"
-		mappedColor = tcell.ColorFuchsia
-	}
-	rp.SetCell(row, 7, tview.NewTableCell(mappedText).
-		SetTextColor(mappedColor).
-		SetMaxWidth(1))
+	return sb.String()
 }
 
-// MoveUp moves selection up
-func (rp *RequestsPanel) MoveUp() {
-	row, _ := rp.GetSelection()
-	if row > 1 {
-		rp.Select(row-1, 0)
-	}
+func renderHeader(pathWidth int) string {
+	cursor := "  " // cursor column placeholder
+	timestamp := padOrTrunc("Time", colTimeWidth)
+	method := padOrTrunc("Method", colMethodWidth)
+	host := padOrTrunc("Host", colHostWidth)
+	path := padOrTrunc("Path", pathWidth)
+	status := padOrTrunc("Code", colStatusWidth)
+	dur := padOrTrunc("Dur", colDurWidth)
+	star := padOrTrunc("*", colStarWidth)
+	mapped := padOrTrunc("M", colMapWidth)
+
+	line := cursor + timestamp + " " + method + " " + host + " " + path + " " + status + " " + dur + " " + star + " " + mapped
+	return headerStyle.Render(line)
 }
 
-// MoveDown moves selection down
-func (rp *RequestsPanel) MoveDown() {
-	row, _ := rp.GetSelection()
-	if row < rp.GetRowCount()-1 {
-		rp.Select(row+1, 0)
-	}
-}
+func renderRow(timestamp, method, host, path, status, dur, star, mapped string, pathWidth int, flow *model.Flow, selected bool) string {
+	// Truncate columns to fit
+	timestamp = padOrTrunc(timestamp, colTimeWidth)
+	method = padOrTrunc(method, colMethodWidth)
+	host = padOrTrunc(host, colHostWidth)
+	path = padOrTrunc(path, pathWidth)
+	status = padOrTrunc(status, colStatusWidth)
+	dur = padOrTrunc(dur, colDurWidth)
+	star = padOrTrunc(star, colStarWidth)
+	mapped = padOrTrunc(mapped, colMapWidth)
 
-// GoToTop goes to the top and enables stay on top
-func (rp *RequestsPanel) GoToTop() {
-	rp.stayOnTop = true
-	if rp.GetRowCount() > 1 {
-		rp.Select(1, 0)
+	// Cursor indicator — accent bar for selected row
+	cursor := "  "
+	if selected {
+		cursor = selectedIndicator().Render("▌ ")
 	}
-	rp.Refresh()
-}
 
-// GoToBottom goes to the bottom of the list
-func (rp *RequestsPanel) GoToBottom() {
-	rp.stayOnTop = false
-	rp.updateTitle()
-	rowCount := rp.GetRowCount()
-	if rowCount > 1 {
-		rp.Select(rowCount-1, 0)
+	tunneled := flow != nil && flow.Tunneled
+
+	timeStr := lipgloss.NewStyle().Foreground(colorMuted).Render(timestamp)
+	methodStr := methodStyle(strings.TrimSpace(method)).Render(method)
+
+	hostColor := colorWhite
+	if tunneled {
+		hostColor = colorMuted
 	}
-}
+	hostStr := lipgloss.NewStyle().Foreground(hostColor).Render(host)
 
-// SetFocused updates the border style based on focus state
-func (rp *RequestsPanel) SetFocused(focused bool) {
-	if focused {
-		rp.SetBorderColor(tcell.ColorWhite)
+	pathColor := colorSubtle
+	if tunneled {
+		pathColor = colorMuted
+	}
+	pathStr := lipgloss.NewStyle().Foreground(pathColor).Render(path)
+
+	var statusStr string
+	if flow != nil && flow.Response != nil {
+		statusStr = statusStyle(flow.Response.StatusCode).Render(status)
+	} else if flow != nil && flow.Error != nil {
+		statusStr = lipgloss.NewStyle().Foreground(colorRed).Render(status)
 	} else {
-		rp.SetBorderColor(tcell.ColorGray)
+		statusStr = lipgloss.NewStyle().Foreground(colorMuted).Render(status)
 	}
+
+	durStr := lipgloss.NewStyle().Foreground(colorMuted).Render(dur)
+	starStr := lipgloss.NewStyle().Foreground(colorStar).Render(star)
+
+	var mappedStr string
+	switch {
+	case flow != nil && flow.Mapped == "local":
+		mappedStr = mappedLocalBadge.Render(mapped)
+	case flow != nil && flow.Mapped == "remote":
+		mappedStr = mappedRemoteBadge.Render(mapped)
+	default:
+		mappedStr = lipgloss.NewStyle().Foreground(colorMuted).Render(mapped)
+	}
+
+	line := cursor + timeStr + " " + methodStr + " " + hostStr + " " + pathStr + " " + statusStr + " " + durStr + " " + starStr + " " + mappedStr
+
+	return line
 }
 
-// truncate truncates a string to maxLen
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+func padOrTrunc(s string, width int) string {
+	if len(s) > width {
+		if width <= 3 {
+			return s[:width]
+		}
+		return s[:width-3] + "..."
 	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
+	return s + strings.Repeat(" ", width-len(s))
 }
