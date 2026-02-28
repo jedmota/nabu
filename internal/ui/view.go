@@ -5,11 +5,22 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
+
+// Version is the application version, set via SetVersion.
+var version = "dev"
+
+// SetVersion sets the application version for display in the UI.
+func SetVersion(v string) { version = v }
 
 // renderFilterBar renders the filter bar at the top.
 func (m *Model) renderFilterBar() string {
+	// App branding on the right
+	brandStyle := lipgloss.NewStyle().Foreground(accentColor()).Bold(true)
+	versionStyle := lipgloss.NewStyle().Foreground(colorSubtle)
+	brand := brandStyle.Render("nabu") + versionStyle.Render(" v"+version)
+
 	items := []struct {
 		label string
 		ft    model.FilterType
@@ -40,7 +51,21 @@ func (m *Model) renderFilterBar() string {
 	}
 
 	sep := filterSepStyle.Render("  ")
-	bar := strings.Join(parts, sep)
+	filters := strings.Join(parts, sep)
+
+	// Layout: filters center, brand right
+	brandWidth := lipgloss.Width(brand)
+	filtersWidth := lipgloss.Width(filters)
+	centerOffset := (m.width - filtersWidth) / 2
+	if centerOffset < 1 {
+		centerOffset = 1
+	}
+	rightPad := m.width - centerOffset - filtersWidth - brandWidth - 1
+	if rightPad < 1 {
+		rightPad = 1
+	}
+
+	bar := strings.Repeat(" ", centerOffset) + filters + strings.Repeat(" ", rightPad) + brand + " "
 	return filterBarStyle.Width(m.width).Render(bar)
 }
 

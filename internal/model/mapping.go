@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"proxy-tui/internal/util"
+	"nabu/internal/util"
 )
 
 // MapRuleType defines the type of mapping

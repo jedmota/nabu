@@ -3,7 +3,7 @@ package proxy
 import (
 	"sync"
 
-	"proxy-tui/internal/util"
+	"nabu/internal/util"
 )
 
 // SSLProxyList manages the list of hosts to perform MITM on

@@ -3,8 +3,8 @@ package viewmodel
 import (
 	"strings"
 
-	"proxy-tui/internal/config"
-	"proxy-tui/internal/model"
+	"nabu/internal/config"
+	"nabu/internal/model"
 )
 
 // AddMapLocalRule adds a map local rule

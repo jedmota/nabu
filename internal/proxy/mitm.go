@@ -10,7 +10,7 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	"proxy-tui/pkg/ca"
+	"nabu/pkg/ca"
 )
 
 // MITMConfig holds MITM configuration

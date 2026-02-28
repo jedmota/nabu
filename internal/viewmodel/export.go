@@ -7,8 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
+
+// appVersion is the application version used in HAR exports.
+// Set via SetAppVersion from main.
+var appVersion = "dev"
+
+// SetAppVersion sets the application version for HAR exports.
+func SetAppVersion(v string) { appVersion = v }
 
 // FormatCURL formats a flow as a cURL command string.
 func FormatCURL(flow *model.Flow) (string, error) {
@@ -127,7 +134,7 @@ func FormatHAR(flows []*model.Flow) ([]byte, error) {
 	har := HARLog{
 		Log: HARLogInner{
 			Version: "1.2",
-			Creator: HARCreator{Name: "proxy-tui", Version: "1.0"},
+			Creator: HARCreator{Name: "nabu", Version: appVersion},
 			Entries: make([]HAREntry, 0, len(flows)),
 		},
 	}

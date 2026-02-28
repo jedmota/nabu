@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"proxy-tui/internal/util"
+	"nabu/internal/util"
 )
 
 // ConfigEntry is the constraint for entries stored by ConfigStore.

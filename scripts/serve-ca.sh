@@ -3,7 +3,7 @@
 # Serve the CA certificate over HTTP for easy installation on devices
 
 PORT=${1:-8888}
-CA_DIR="$HOME/.proxy-tui"
+CA_DIR="$HOME/.nabu"
 CA_FILE="$CA_DIR/ca.crt"
 
 # Check if CA exists
@@ -27,7 +27,7 @@ get_local_ip() {
 LOCAL_IP=$(get_local_ip)
 
 echo "============================================"
-echo "  Proxy TUI - CA Certificate Server"
+echo "  Nabu - CA Certificate Server"
 echo "============================================"
 echo ""
 echo "Serving CA certificate on port $PORT"
@@ -54,7 +54,7 @@ cat > "$TEMP_DIR/index.html" << 'EOF'
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Proxy TUI - CA Certificate</title>
+    <title>Nabu - CA Certificate</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
@@ -67,7 +67,7 @@ cat > "$TEMP_DIR/index.html" << 'EOF'
     </style>
 </head>
 <body>
-    <h1>Proxy TUI CA Certificate</h1>
+    <h1>Nabu CA Certificate</h1>
     <a href="/ca.crt">Download CA Certificate</a>
     <div class="instructions">
         <h3>Installation Instructions:</h3>

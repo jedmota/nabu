@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/util"
+	"nabu/internal/model"
+	"nabu/internal/util"
 )
 
 // MapLocalResponse represents the JSONC file structure for mapped responses

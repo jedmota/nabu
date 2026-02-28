@@ -1,7 +1,7 @@
 package viewmodel
 
 import (
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // AddWhitelistPattern adds a pattern to the whitelist and SSL proxy list

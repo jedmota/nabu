@@ -18,7 +18,7 @@ func (e MapRemoteEntry) GetEnabled() bool   { return e.Enabled }
 var mapRemoteStore = ConfigStore[MapRemoteEntry]{
 	filename: mapRemoteFile,
 	header: []string{
-		"// Proxy TUI Map Remote",
+		"// Nabu Map Remote",
 		"// Redirect requests to different URLs transparently",
 		"// Pattern supports wildcards: */api/users*, *example.com*",
 	},

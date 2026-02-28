@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/proxy"
+	"nabu/internal/model"
+	"nabu/internal/proxy"
 )
 
 // mockFlowSource implements proxy.FlowSource for testing.

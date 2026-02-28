@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // FlowStore manages the collection of flows
@@ -18,6 +18,7 @@ type FlowStore struct {
 	events      chan model.FlowEvent
 	subscribers []chan model.FlowEvent
 	subMu       sync.Mutex
+	onChange    func() // optional callback on Add/Update
 }
 
 // NewFlowStore creates a new flow store
@@ -76,6 +77,11 @@ func (s *FlowStore) emit(event model.FlowEvent) {
 	s.subMu.Unlock()
 }
 
+// OnChange registers a callback that is invoked after Add or Update.
+func (s *FlowStore) OnChange(fn func()) {
+	s.onChange = fn
+}
+
 // SetPaused sets the paused state. When paused, Add and Update are no-ops.
 func (s *FlowStore) SetPaused(paused bool) {
 	if paused {
@@ -121,6 +127,10 @@ func (s *FlowStore) addFlow(flow *model.Flow) model.FlowID {
 
 	s.emit(model.FlowEvent{Type: model.FlowEventRequest, Flow: flow})
 
+	if s.onChange != nil {
+		s.onChange()
+	}
+
 	return id
 }
 
@@ -134,6 +144,10 @@ func (s *FlowStore) Update(flow *model.Flow, eventType model.FlowEventType) {
 	s.mu.Unlock()
 
 	s.emit(model.FlowEvent{Type: eventType, Flow: flow})
+
+	if s.onChange != nil {
+		s.onChange()
+	}
 }
 
 // Get retrieves a flow by ID

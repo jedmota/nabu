@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -11,9 +12,17 @@ import (
 
 	"github.com/elazarl/goproxy"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/pkg/ca"
+	"nabu/internal/debug"
+	"nabu/internal/model"
+	"nabu/pkg/ca"
 )
+
+// debugLogger adapts debug.Log to goproxy's Logger interface.
+type debugLogger struct{}
+
+func (debugLogger) Printf(format string, v ...interface{}) {
+	debug.Log(format, v...)
+}
 
 // FlowProvider gives read-only access to flow data and server metadata.
 // Use this when a consumer only needs to observe flows (e.g. IPC Server).
@@ -88,6 +97,7 @@ func New(config *Config) (*Proxy, error) {
 
 	goproxyServer := goproxy.NewProxyHttpServer()
 	goproxyServer.Verbose = config.Verbose
+	goproxyServer.Logger = debugLogger{}
 
 	bindAddr := config.BindAddress
 	if bindAddr == "" {
@@ -157,6 +167,17 @@ func (p *Proxy) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.R
 		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
+	// Decompress gzip request body for display
+	storedReqBody := bodyBytes
+	if strings.EqualFold(req.Header.Get("Content-Encoding"), "gzip") && len(bodyBytes) > 0 {
+		if gr, err := gzip.NewReader(bytes.NewReader(bodyBytes)); err == nil {
+			if decompressed, err := io.ReadAll(gr); err == nil {
+				storedReqBody = decompressed
+			}
+			gr.Close()
+		}
+	}
+
 	// Construct full URL (for HTTPS MITM, req.URL only has the path)
 	fullURL := req.URL.String()
 	if !strings.HasPrefix(fullURL, "http://") && !strings.HasPrefix(fullURL, "https://") {
@@ -177,7 +198,7 @@ func (p *Proxy) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.R
 			Path:    req.URL.Path,
 			Proto:   req.Proto,
 			Headers: req.Header.Clone(),
-			Body:    bodyBytes,
+			Body:    storedReqBody,
 		},
 	}
 
@@ -215,9 +236,18 @@ func (p *Proxy) handleRequest(req *http.Request, ctx *goproxy.ProxyCtx) (*http.R
 					Headers:    resp.Header.Clone(),
 				}
 				if resp.Body != nil {
-					bodyBytes, _ := io.ReadAll(resp.Body)
-					flow.Response.Body = bodyBytes
-					resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+					respBody, _ := io.ReadAll(resp.Body)
+					resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
+					// Decompress gzip for display
+					if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") && len(respBody) > 0 {
+						if gr, err := gzip.NewReader(bytes.NewReader(respBody)); err == nil {
+							if decompressed, err := io.ReadAll(gr); err == nil {
+								respBody = decompressed
+							}
+							gr.Close()
+						}
+					}
+					flow.Response.Body = respBody
 				}
 				flow.EndTime = time.Now()
 				p.flowStore.Update(flow, model.FlowEventResponse)
@@ -248,13 +278,24 @@ func (p *Proxy) handleResponse(resp *http.Response, ctx *goproxy.ProxyCtx) *http
 		resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	}
 
+	// Decompress gzip body for display (store decompressed in flow)
+	storedBody := bodyBytes
+	if strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") && len(bodyBytes) > 0 {
+		if gr, err := gzip.NewReader(bytes.NewReader(bodyBytes)); err == nil {
+			if decompressed, err := io.ReadAll(gr); err == nil {
+				storedBody = decompressed
+			}
+			gr.Close()
+		}
+	}
+
 	// Update flow with response
 	flow.Response = &model.Response{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Proto:      resp.Proto,
 		Headers:    resp.Header.Clone(),
-		Body:       bodyBytes,
+		Body:       storedBody,
 	}
 	flow.EndTime = time.Now()
 

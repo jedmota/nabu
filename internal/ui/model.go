@@ -15,10 +15,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"proxy-tui/internal/config"
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/util"
-	"proxy-tui/internal/viewmodel"
+	"nabu/internal/config"
+	"nabu/internal/model"
+	"nabu/internal/util"
+	"nabu/internal/viewmodel"
 )
 
 // Model is the root Bubble Tea model for the proxy TUI.
@@ -98,10 +98,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case FlowsUpdatedMsg:
+		prevID := m.requestList.selectedFlowID
 		m.requestList.OnFlowsUpdated()
-		// Update detail view if we have a selection
+		// Only refresh detail when the selection actually changed (stayOnTop follows newest)
+		// or when there was no previous selection
 		if flow := m.vm.GetSelectedFlow(); flow != nil {
-			m.detailView.SetFlow(flow)
+			if m.requestList.IsStayOnTop() || m.requestList.selectedFlowID != prevID {
+				m.detailView.SetFlow(flow)
+			}
 		}
 		return m, ListenForUpdates(m.vm.Updates())
 
@@ -586,7 +590,7 @@ func (m *Model) exportHAR(all bool) {
 	}
 
 	dir := os.TempDir()
-	filename := fmt.Sprintf("proxy-tui-%s.har", time.Now().Format("20060102-150405"))
+	filename := fmt.Sprintf("nabu-%s.har", time.Now().Format("20060102-150405"))
 	path := filepath.Join(dir, filename)
 
 	if err := os.WriteFile(path, data, 0644); err != nil {

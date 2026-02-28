@@ -23,4 +23,4 @@ jobs:
         run: go test -race -count=1 ./...
 
       - name: Build
-        run: go build -o proxy-tui ./cmd/proxy-tui
+        run: go build -o nabu ./cmd/nabu

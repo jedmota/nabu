@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 const alertsFile = "alerts.json"
