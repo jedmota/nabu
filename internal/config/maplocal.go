@@ -20,7 +20,7 @@ func (e MapLocalEntry) GetEnabled() bool   { return e.Enabled }
 var mapLocalStore = ConfigStore[MapLocalEntry]{
 	filename: mapLocalFile,
 	header: []string{
-		"// Proxy TUI Map Local",
+		"// Nabu Map Local",
 		"// Map remote URLs to local files",
 		"// Pattern supports wildcards: */api/users*, *example.com*",
 	},

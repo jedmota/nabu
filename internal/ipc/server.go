@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/proxy"
+	"nabu/internal/model"
+	"nabu/internal/proxy"
 )
 
 const syncBatchSize = 100

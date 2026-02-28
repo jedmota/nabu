@@ -3,7 +3,7 @@ package model
 import (
 	"strings"
 
-	"proxy-tui/internal/util"
+	"nabu/internal/util"
 )
 
 // FilterType represents different filter modes

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // IPCMessage is the envelope for all IPC messages.

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // --- FormatCURL ---

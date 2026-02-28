@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // ReplayFlow re-sends the given flow's request through the proxy,

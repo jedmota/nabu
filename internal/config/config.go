@@ -7,17 +7,22 @@ import (
 	"path/filepath"
 	"strings"
 
-	"proxy-tui/internal/util"
+	"nabu/internal/util"
 )
 
 const (
-	configDir     = ".proxy-tui"
+	configDir     = ".nabu"
 	whitelistFile = "whitelist.jsonc"
 )
 
 // configDirOverride, when non-empty, is returned by GetConfigDir instead of
-// the default ~/.proxy-tui. Tests in this package set it directly.
+// the default ~/.nabu. Tests set it via SetConfigDirOverride.
 var configDirOverride string
+
+// SetConfigDirOverride sets a custom config directory (for testing).
+func SetConfigDirOverride(dir string) {
+	configDirOverride = dir
+}
 
 // WhitelistPattern represents a single whitelist pattern with enabled state
 type WhitelistPattern struct {
@@ -131,7 +136,7 @@ func SaveWhitelist(patterns []WhitelistPattern) error {
 
 	// Write JSONC with comments
 	file.WriteString("{\n")
-	file.WriteString("  // Proxy TUI Whitelist\n")
+	file.WriteString("  // Nabu Whitelist\n")
 	file.WriteString("  // Patterns support wildcards: *.example.com\n")
 	file.WriteString("  \"patterns\": [\n")
 

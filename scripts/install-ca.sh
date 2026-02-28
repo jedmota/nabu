@@ -1,18 +1,18 @@
 #!/bin/bash
-# install-ca.sh - Install Proxy TUI CA certificate
+# install-ca.sh - Install Nabu CA certificate
 
 set -e
 
-CA_DIR="$HOME/.proxy-tui"
+CA_DIR="$HOME/.nabu"
 CA_CERT="$CA_DIR/ca.crt"
 
 if [ ! -f "$CA_CERT" ]; then
     echo "Error: CA certificate not found at $CA_CERT"
-    echo "Please run proxy-tui first to generate the CA certificate."
+    echo "Please run nabu first to generate the CA certificate."
     exit 1
 fi
 
-echo "Installing Proxy TUI CA certificate..."
+echo "Installing Nabu CA certificate..."
 echo "CA fingerprint: $(openssl x509 -in "$CA_CERT" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
 
 # Detect OS and install accordingly
@@ -20,17 +20,17 @@ case "$(uname -s)" in
     Linux*)
         if [ -d /etc/pki/ca-trust/source/anchors ]; then
             # Fedora/RHEL/CentOS
-            sudo cp "$CA_CERT" /etc/pki/ca-trust/source/anchors/proxy-tui-ca.crt
+            sudo cp "$CA_CERT" /etc/pki/ca-trust/source/anchors/nabu-ca.crt
             sudo update-ca-trust
             echo "CA installed (Fedora/RHEL method)"
         elif [ -d /usr/local/share/ca-certificates ]; then
             # Debian/Ubuntu
-            sudo cp "$CA_CERT" /usr/local/share/ca-certificates/proxy-tui-ca.crt
+            sudo cp "$CA_CERT" /usr/local/share/ca-certificates/nabu-ca.crt
             sudo update-ca-certificates
             echo "CA installed (Debian/Ubuntu method)"
         elif [ -d /etc/ca-certificates/trust-source/anchors ]; then
             # Arch Linux
-            sudo cp "$CA_CERT" /etc/ca-certificates/trust-source/anchors/proxy-tui-ca.crt
+            sudo cp "$CA_CERT" /etc/ca-certificates/trust-source/anchors/nabu-ca.crt
             sudo trust extract-compat
             echo "CA installed (Arch Linux method)"
         else

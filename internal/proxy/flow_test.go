@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 func makeFlow(method, url, host string) *model.Flow {

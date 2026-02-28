@@ -5,8 +5,7 @@
 *.so
 *.dylib
 bin/
-proxytui
-# proxy-tui
+nabu
 
 # Archives
 *.tar.gz

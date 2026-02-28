@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/util"
+	"nabu/internal/model"
+	"nabu/internal/util"
 )
 
 // FormatFlowSummary returns a formatted summary of a flow for the list
@@ -67,10 +68,15 @@ func (vm *ViewModel) FormatFlowDetail(flow *model.Flow, raw bool) string {
 	sb.WriteString(fmt.Sprintf("[green]%s[-] %s %s\n", flow.Request.Method, flow.Request.URL, flow.Request.Proto))
 	sb.WriteString(fmt.Sprintf("Host: %s\n", flow.Request.Host))
 
-	// Request headers
+	// Request headers (sorted alphabetically)
 	sb.WriteString("\n[blue]Headers:[-]\n")
-	for key, values := range flow.Request.Headers {
-		for _, value := range values {
+	reqKeys := make([]string, 0, len(flow.Request.Headers))
+	for key := range flow.Request.Headers {
+		reqKeys = append(reqKeys, key)
+	}
+	sort.Strings(reqKeys)
+	for _, key := range reqKeys {
+		for _, value := range flow.Request.Headers[key] {
 			sb.WriteString(fmt.Sprintf("  %s: %s\n", key, value))
 		}
 	}
@@ -91,10 +97,15 @@ func (vm *ViewModel) FormatFlowDetail(flow *model.Flow, raw bool) string {
 		sb.WriteString("\n[yellow]═══ Response ═══[-]\n\n")
 		sb.WriteString(fmt.Sprintf("[cyan]%s[-] %s\n", flow.Response.Status, flow.Response.Proto))
 
-		// Response headers
+		// Response headers (sorted alphabetically)
 		sb.WriteString("\n[blue]Headers:[-]\n")
-		for key, values := range flow.Response.Headers {
-			for _, value := range values {
+		respKeys := make([]string, 0, len(flow.Response.Headers))
+		for key := range flow.Response.Headers {
+			respKeys = append(respKeys, key)
+		}
+		sort.Strings(respKeys)
+		for _, key := range respKeys {
+			for _, value := range flow.Response.Headers[key] {
 				sb.WriteString(fmt.Sprintf("  %s: %s\n", key, value))
 			}
 		}
@@ -136,9 +147,33 @@ func formatDuration(d interface{ Milliseconds() int64 }) string {
 	return fmt.Sprintf("%.2fs", float64(ms)/1000)
 }
 
+// isBinary checks whether data appears to be binary (non-text) content.
+func isBinary(data []byte) bool {
+	// Check the first 512 bytes for non-text bytes
+	n := len(data)
+	if n > 512 {
+		n = 512
+	}
+	for _, b := range data[:n] {
+		if b == 0 {
+			return true
+		}
+		// Allow common text bytes: tab, newline, carriage return, and printable ASCII+
+		if b < 0x08 || (b > 0x0D && b < 0x20 && b != 0x1B) {
+			return true
+		}
+	}
+	return false
+}
+
 // formatBody formats the body based on content type
 func formatBody(body []byte, contentType string) string {
 	maxLen := 10000
+
+	// Check for binary data
+	if isBinary(body) {
+		return fmt.Sprintf("[gray]Binary data (%d bytes)[-]", len(body))
+	}
 
 	// Try to pretty-print JSON
 	if strings.Contains(contentType, "json") || util.IsJSON(body) {

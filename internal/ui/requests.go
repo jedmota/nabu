@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/viewmodel"
+	"nabu/internal/model"
+	"nabu/internal/viewmodel"
 )
 
 // Column widths (fixed columns)
@@ -97,6 +97,11 @@ func (r *RequestListModel) GoToBottom() {
 	}
 	r.ensureVisible()
 	r.syncSelection()
+}
+
+// IsStayOnTop returns whether the list follows new requests.
+func (r *RequestListModel) IsStayOnTop() bool {
+	return r.stayOnTop
 }
 
 // OnFlowsUpdated handles a flow update.

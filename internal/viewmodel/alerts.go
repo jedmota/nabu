@@ -1,8 +1,8 @@
 package viewmodel
 
 import (
-	"proxy-tui/internal/config"
-	"proxy-tui/internal/model"
+	"nabu/internal/config"
+	"nabu/internal/model"
 )
 
 // GetAlertRules returns the current alert rules.

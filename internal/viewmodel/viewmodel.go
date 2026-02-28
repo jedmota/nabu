@@ -3,9 +3,9 @@ package viewmodel
 import (
 	"sync"
 
-	"proxy-tui/internal/config"
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/proxy"
+	"nabu/internal/config"
+	"nabu/internal/model"
+	"nabu/internal/proxy"
 )
 
 // ConfigPersistence abstracts config file operations so the ViewModel

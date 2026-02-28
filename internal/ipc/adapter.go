@@ -1,8 +1,8 @@
 package ipc
 
 import (
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/proxy"
+	"nabu/internal/model"
+	"nabu/internal/proxy"
 )
 
 // Adapter wraps an IPC Client to satisfy the proxy.FlowSource interface,

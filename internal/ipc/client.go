@@ -7,8 +7,8 @@ import (
 	"net"
 	"sync"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/proxy"
+	"nabu/internal/model"
+	"nabu/internal/proxy"
 )
 
 const maxScanBuf = 10 * 1024 * 1024 // 10 MB

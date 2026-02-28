@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/viewmodel"
+	"nabu/internal/model"
+	"nabu/internal/viewmodel"
 )
 
 // tviewColorRe matches tview color tags like [green], [cyan], [gray], [red], [blue], [yellow], [-], [::b], [::d], [-::-]

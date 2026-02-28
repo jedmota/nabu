@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 func TestAlerts_RoundTrip(t *testing.T) {

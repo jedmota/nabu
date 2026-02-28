@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"proxy-tui/internal/config"
+	"nabu/internal/config"
 )
 
 // Theme defines an accent color pair.

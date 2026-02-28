@@ -1,4 +1,4 @@
-module proxy-tui
+module nabu
 
 go 1.24.2
 

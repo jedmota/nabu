@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // fetchRemote fetches from a remote URL and returns the response as if from original
