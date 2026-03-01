@@ -4,6 +4,8 @@ An HTTP/HTTPS debugging proxy with a terminal UI. Intercept, inspect, and manipu
 
 Built with Go using [goproxy](https://github.com/elazarl/goproxy) for MITM interception and [tview](https://github.com/rivo/tview) for the terminal interface.
 
+![nabu screenshot](assets/screenshot.png)
+
 ## Features
 
 - **Conditional HTTPS interception** — only MITM whitelisted hosts, tunnel everything else
