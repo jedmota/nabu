@@ -1,8 +1,8 @@
-# proxy-tui
+# nabu
 
 An HTTP/HTTPS debugging proxy with a terminal UI. Intercept, inspect, and manipulate HTTP traffic in real-time through a keyboard-driven interface with vim-style navigation.
 
-Built with Go using [goproxy](https://github.com/elazarl/goproxy) for MITM interception and [tview](https://github.com/rivo/tview) for the terminal interface.
+Built with Go using [goproxy](https://github.com/elazarl/goproxy) for MITM interception and [bubbletea](https://github.com/charmbracelet/bubbletea)/[lipgloss](https://github.com/charmbracelet/lipgloss) for the terminal interface.
 
 ![nabu screenshot](assets/screenshot.png)
 
@@ -23,23 +23,23 @@ Built with Go using [goproxy](https://github.com/elazarl/goproxy) for MITM inter
 ## Install
 
 ```bash
-go build -o proxy-tui ./cmd/proxy-tui
+go build -o nabu ./cmd/nabu
 ```
 
 ## Usage
 
 ```bash
 # Start with defaults (0.0.0.0:9090)
-./proxy-tui
+./nabu
 
 # Custom port and bind address
-./proxy-tui --port 8080 --bind 127.0.0.1
+./nabu --port 8080 --bind 127.0.0.1
 
 # Headless mode (no TUI, proxy only)
-./proxy-tui --headless
+./nabu --headless
 
 # Show CA certificate path and fingerprint
-./proxy-tui --show-ca
+./nabu --show-ca
 ```
 
 Configure your client to use the proxy:
@@ -49,7 +49,7 @@ export HTTP_PROXY=http://localhost:9090
 export HTTPS_PROXY=http://localhost:9090
 ```
 
-For HTTPS interception, install the generated CA certificate from `~/.proxy-tui/ca.crt` into your system or browser trust store. A helper script is provided:
+For HTTPS interception, install the generated CA certificate from `~/.nabu/ca.crt` into your system or browser trust store. A helper script is provided:
 
 ```bash
 scripts/install-ca.sh
@@ -60,21 +60,21 @@ scripts/install-ca.sh
 Add rules directly from the command line (the proxy starts normally after adding):
 
 ```bash
-./proxy-tui --whitelist "*.example.com"
-./proxy-tui --map-local "*/api/users=>/tmp/users.json"
-./proxy-tui --map-remote "https://api.prod.com/*=>http://localhost:3000"
+./nabu --whitelist "*.example.com"
+./nabu --map-local "*/api/users=>/tmp/users.json"
+./nabu --map-remote "https://api.prod.com/*=>http://localhost:3000"
 ```
 
 List or remove rules (prints and exits):
 
 ```bash
-./proxy-tui --list-whitelist
-./proxy-tui --list-map-local
-./proxy-tui --list-map-remote
+./nabu --list-whitelist
+./nabu --list-map-local
+./nabu --list-map-remote
 
-./proxy-tui --rm-whitelist 1
-./proxy-tui --rm-map-local 2
-./proxy-tui --rm-map-remote 3
+./nabu --rm-whitelist 1
+./nabu --rm-map-local 2
+./nabu --rm-map-remote 3
 ```
 
 ## Keybindings
@@ -126,7 +126,7 @@ List or remove rules (prints and exits):
 
 ```
 ┌──────────────────────────────────────────────┐
-│              TUI (tview/tcell)                │
+│         TUI (bubbletea/lipgloss)              │
 │       Requests Panel ─ Detail Panel          │
 └──────────────────┬───────────────────────────┘
                    │
@@ -150,11 +150,11 @@ The proxy emits flow events through a channel-based observer pattern. The `FlowS
 
 ### Multi-instance
 
-When a second instance starts on the same port, it detects the running primary via a Unix domain socket at `~/.proxy-tui/proxy-PORT.sock` and connects as a read-only viewer. The primary streams existing flows in batches, then pushes events in real-time.
+When a second instance starts on the same port, it detects the running primary via a Unix domain socket at `~/.nabu/proxy-PORT.sock` and connects as a read-only viewer. The primary streams existing flows in batches, then pushes events in real-time.
 
 ## Configuration
 
-All configuration lives in `~/.proxy-tui/`:
+All configuration lives in `~/.nabu/`:
 
 | File | Purpose |
 |------|---------|
