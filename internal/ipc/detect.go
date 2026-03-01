@@ -8,18 +8,27 @@ import (
 	"time"
 )
 
+// socketDirOverride, when non-empty, is used by SocketPath instead of
+// the default ~/.nabu. Tests in this package set it directly.
+var socketDirOverride string
+
 // SocketPath returns the Unix domain socket path for a given proxy port.
 func SocketPath(port int) string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/tmp"
+	var dir string
+	if socketDirOverride != "" {
+		dir = socketDirOverride
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			home = "/tmp"
+		}
+		dir = filepath.Join(home, ".nabu")
 	}
-	dir := filepath.Join(home, ".proxy-tui")
 	os.MkdirAll(dir, 0o755)
 	return filepath.Join(dir, fmt.Sprintf("proxy-%d.sock", port))
 }
 
-// IsInstanceRunning checks whether another proxy-tui instance is already
+// IsInstanceRunning checks whether another nabu instance is already
 // serving on the given port by probing the Unix domain socket.
 // If a stale socket exists (no one listening), it is cleaned up.
 func IsInstanceRunning(port int) bool {

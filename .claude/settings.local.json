@@ -3,7 +3,21 @@
     "allow": [
       "WebFetch(domain:10.55.100.2)",
       "WebFetch(domain:proxy.jmota.org)",
-      "Bash(go build:*)"
+      "Bash(go build:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(go install:*)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go clean:*)",
+      "Bash(go doc:*)",
+      "Bash(ls:*)",
+      "Bash(go version:*)",
+      "Bash(go list:*)",
+      "Bash(make test:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(go mod graph:*)"
     ]
   }
 }

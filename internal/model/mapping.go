@@ -3,6 +3,9 @@ package model
 import (
 	"regexp"
 	"strings"
+	"sync"
+
+	"nabu/internal/util"
 )
 
 // MapRuleType defines the type of mapping
@@ -13,16 +16,36 @@ const (
 	MapRemote
 )
 
+// Default priorities for rule types.
+// Higher value = checked first by FindMatch.
+const (
+	PriorityMapLocal  = 100
+	PriorityMapRemote = 50
+)
+
+func defaultPriority(t MapRuleType) int {
+	switch t {
+	case MapLocal:
+		return PriorityMapLocal
+	case MapRemote:
+		return PriorityMapRemote
+	default:
+		return 0
+	}
+}
+
 // MapRule defines a URL mapping rule
 type MapRule struct {
 	ID          int
 	Type        MapRuleType
 	Enabled     bool
 	Name        string
+	Method      string         // HTTP method filter (empty = match all)
 	Pattern     string         // URL pattern to match
 	Replacement string         // Local path or remote URL
 	StatusCode  int            // HTTP status code (default 200)
 	ContentType string         // Content-Type header (auto-detect if empty)
+	Priority    int            // Higher priority rules are matched first
 	compiled    *regexp.Regexp // compiled pattern for regex matching
 }
 
@@ -34,20 +57,23 @@ func NewMapRule(ruleType MapRuleType, pattern, replacement string) *MapRule {
 		Pattern:     pattern,
 		Replacement: replacement,
 		StatusCode:  200,
+		Priority:    defaultPriority(ruleType),
 	}
 	rule.compile()
 	return rule
 }
 
 // NewMapLocalRule creates a new map local rule with all options
-func NewMapLocalRule(pattern, localPath string, statusCode int, contentType string) *MapRule {
+func NewMapLocalRule(pattern, localPath string, statusCode int, contentType string, method string) *MapRule {
 	rule := &MapRule{
 		Type:        MapLocal,
 		Enabled:     true,
+		Method:      strings.ToUpper(method),
 		Pattern:     pattern,
 		Replacement: localPath,
 		StatusCode:  statusCode,
 		ContentType: contentType,
+		Priority:    PriorityMapLocal,
 	}
 	if rule.StatusCode == 0 {
 		rule.StatusCode = 200
@@ -57,12 +83,14 @@ func NewMapLocalRule(pattern, localPath string, statusCode int, contentType stri
 }
 
 // NewMapRemoteRule creates a new map remote rule
-func NewMapRemoteRule(pattern, remoteURL string) *MapRule {
+func NewMapRemoteRule(pattern, remoteURL, method string) *MapRule {
 	rule := &MapRule{
 		Type:        MapRemote,
 		Enabled:     true,
+		Method:      strings.ToUpper(method),
 		Pattern:     pattern,
 		Replacement: remoteURL,
+		Priority:    PriorityMapRemote,
 	}
 	rule.compile()
 	return rule
@@ -148,9 +176,13 @@ func (r *MapRule) compile() {
 	}
 }
 
-// Match checks if a URL matches this rule
-func (r *MapRule) Match(url string) bool {
+// MatchRequest checks if a URL and method match this rule
+func (r *MapRule) MatchRequest(url, method string) bool {
 	if !r.Enabled {
+		return false
+	}
+	// Check method filter (empty = match all)
+	if r.Method != "" && !strings.EqualFold(r.Method, method) {
 		return false
 	}
 	if r.compiled != nil {
@@ -162,7 +194,7 @@ func (r *MapRule) Match(url string) bool {
 
 	// Glob pattern with *
 	if strings.Contains(pattern, "*") {
-		return matchGlobPattern(url, pattern)
+		return util.MatchGlob(url, pattern)
 	}
 
 	// Exact match (with optional trailing slash)
@@ -181,31 +213,6 @@ func (r *MapRule) Match(url string) bool {
 	return false
 }
 
-// matchGlobPattern matches a URL against a glob pattern
-func matchGlobPattern(url, pattern string) bool {
-	// Convert glob to regex
-	regexPattern := "^"
-	for _, c := range pattern {
-		switch c {
-		case '*':
-			regexPattern += ".*"
-		case '?':
-			regexPattern += "."
-		case '.', '+', '(', ')', '[', ']', '{', '}', '^', '$', '|', '\\':
-			regexPattern += "\\" + string(c)
-		default:
-			regexPattern += string(c)
-		}
-	}
-	regexPattern += "$"
-
-	re, err := regexp.Compile(regexPattern)
-	if err != nil {
-		return false
-	}
-	return re.MatchString(url)
-}
-
 // Apply returns the replacement URL for a matched URL
 func (r *MapRule) Apply(url string) string {
 	if r.compiled != nil {
@@ -221,6 +228,7 @@ func (r *MapRule) Apply(url string) string {
 
 // MapRuleStore manages mapping rules
 type MapRuleStore struct {
+	mu     sync.RWMutex
 	rules  []*MapRule
 	nextID int
 }
@@ -235,6 +243,8 @@ func NewMapRuleStore() *MapRuleStore {
 
 // Add adds a new rule
 func (s *MapRuleStore) Add(rule *MapRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	rule.ID = s.nextID
 	s.nextID++
 	s.rules = append(s.rules, rule)
@@ -242,6 +252,8 @@ func (s *MapRuleStore) Add(rule *MapRule) {
 
 // Remove removes a rule by ID
 func (s *MapRuleStore) Remove(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for i, r := range s.rules {
 		if r.ID == id {
 			s.rules = append(s.rules[:i], s.rules[i+1:]...)
@@ -252,6 +264,8 @@ func (s *MapRuleStore) Remove(id int) {
 
 // Toggle toggles a rule's enabled state
 func (s *MapRuleStore) Toggle(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, r := range s.rules {
 		if r.ID == id {
 			r.Enabled = !r.Enabled
@@ -260,36 +274,41 @@ func (s *MapRuleStore) Toggle(id int) {
 	}
 }
 
-// FindMatch finds the first matching rule for a URL
-// Map Local rules are always checked first, then Map Remote rules
-func (s *MapRuleStore) FindMatch(url string) *MapRule {
-	// First pass: check Map Local rules
+// FindMatch finds the highest-priority matching rule for a URL and method.
+// Rules with higher Priority values are preferred. Among rules with equal
+// priority, the first one added wins (stable, insertion-order tiebreak).
+func (s *MapRuleStore) FindMatch(url, method string) *MapRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var best *MapRule
 	for _, r := range s.rules {
-		if r.Type == MapLocal && r.Match(url) {
-			return r
+		if r.MatchRequest(url, method) && (best == nil || r.Priority > best.Priority) {
+			best = r
 		}
 	}
-	// Second pass: check Map Remote rules
-	for _, r := range s.rules {
-		if r.Type == MapRemote && r.Match(url) {
-			return r
-		}
-	}
-	return nil
+	return best
 }
 
 // All returns all rules
 func (s *MapRuleStore) All() []*MapRule {
-	return s.rules
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]*MapRule, len(s.rules))
+	copy(result, s.rules)
+	return result
 }
 
 // Clear removes all rules
 func (s *MapRuleStore) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.rules = make([]*MapRule, 0)
 }
 
 // GetByID returns a rule by ID
 func (s *MapRuleStore) GetByID(id int) *MapRule {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, r := range s.rules {
 		if r.ID == id {
 			return r
@@ -300,6 +319,8 @@ func (s *MapRuleStore) GetByID(id int) *MapRule {
 
 // Update updates an existing rule
 func (s *MapRuleStore) Update(rule *MapRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for i, r := range s.rules {
 		if r.ID == rule.ID {
 			s.rules[i] = rule

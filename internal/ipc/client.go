@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"sync"
 
-	"proxy-tui/internal/model"
-	"proxy-tui/internal/proxy"
+	"nabu/internal/model"
+	"nabu/internal/proxy"
 )
 
 const maxScanBuf = 10 * 1024 * 1024 // 10 MB
@@ -18,6 +19,7 @@ type Client struct {
 	conn        net.Conn
 	store       *proxy.FlowStore
 	eventChan   chan model.FlowEvent
+	mu          sync.RWMutex
 	port        int
 	bindAddress string
 	done        chan struct{}
@@ -61,11 +63,15 @@ func (c *Client) FlowStore() *proxy.FlowStore {
 
 // Port returns the proxy port received from the primary.
 func (c *Client) Port() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.port
 }
 
 // BindAddress returns the bind address received from the primary.
 func (c *Client) BindAddress() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.bindAddress
 }
 
@@ -112,8 +118,10 @@ func (c *Client) readLoop() {
 		case "hello":
 			var p HelloPayload
 			if err := json.Unmarshal(msg.Payload, &p); err == nil {
+				c.mu.Lock()
 				c.port = p.Port
 				c.bindAddress = p.BindAddress
+				c.mu.Unlock()
 			}
 
 		case "sync":

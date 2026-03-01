@@ -4,12 +4,18 @@ An HTTP/HTTPS debugging proxy with a terminal UI. Intercept, inspect, and manipu
 
 Built with Go using [goproxy](https://github.com/elazarl/goproxy) for MITM interception and [tview](https://github.com/rivo/tview) for the terminal interface.
 
+![nabu screenshot](assets/screenshot.png)
+
 ## Features
 
 - **Conditional HTTPS interception** — only MITM whitelisted hosts, tunnel everything else
 - **Map Local** — serve mock responses from local files
 - **Map Remote** — transparently redirect requests to different servers
 - **Real-time flow capture** — view requests and responses as they happen
+- **Pause / Resume** — bypass all proxying with a single key, HAR import still works while paused
+- **Star flows** — bookmark interesting flows and filter to show only starred ones
+- **Export / Import** — export flows as HAR or cURL, import HAR files with a file picker
+- **Alerts** — configurable alerts for 5xx responses and high latency
 - **Multi-instance** — secondary viewers connect to a running proxy via IPC
 - **Persistent configuration** — whitelist and mapping rules saved as JSONC
 - **CLI management** — add, list, and remove rules from the command line
@@ -89,6 +95,7 @@ List or remove rules (prints and exits):
 |-----|--------|
 | `1` | Show all flows |
 | `2` | Show whitelist-matched flows only |
+| `3` | Show starred flows only |
 | `/` | Search by URL or host |
 
 ### Actions
@@ -101,6 +108,15 @@ List or remove rules (prints and exits):
 | `L` | Open map-local manager |
 | `r` | Quick-add map-remote rule |
 | `R` | Open map-remote manager |
+| `s` | Star / unstar selected flow |
+| `S` | Star all listed flows |
+| `p` | Pause / resume capture (full bypass) |
+| `.` | Replay selected request |
+| `x` | Copy selected request as cURL |
+| `e` | Export selected flow as HAR |
+| `E` | Export all filtered flows as HAR |
+| `i` | Import HAR file (file picker with Tab completion) |
+| `a` | Alert settings |
 | `T` | Toggle raw / pretty JSON |
 | `c` | Clear all flows |
 | `?` | Show keybindings help |
@@ -146,6 +162,7 @@ All configuration lives in `~/.proxy-tui/`:
 | `whitelist.jsonc` | Host patterns for selective HTTPS interception |
 | `maplocal.jsonc` | Rules mapping URL patterns to local files |
 | `mapremote.jsonc` | Rules redirecting requests to different servers |
+| `alerts.json` | Alert rules (5xx status codes, latency thresholds) |
 
 Configuration files use JSONC (JSON with comments) and can be edited by hand.
 

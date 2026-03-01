@@ -48,15 +48,16 @@ Construir um proxy inspirado no Proxyman, mas com UI terminal. O backend Go inte
   - `W` - Whitelist Manager
 
 #### Filtros
-- Opções de visualização: Todos (`1`), Whitelist (`2`), Pesquisa por keyword (`/`)
+- Opções de visualização: Todos (`1`), Whitelist (`2`), Starred (`3`), Pesquisa por keyword (`/`)
 - Filtro custom persiste mesmo quando muda para "Todos"
 - Detalhes de header/body com syntax highlighting JSON
 - Map Local tem prioridade sobre Map Remote
 
-### 2.3 Alertas Internos (Fase 2 - não implementado)
-- Alertas configuráveis para respostas 5xx, latência elevada, payloads específicos
-- Compatibilidade Linux/macOS
-- Suporte a workflow TUI
+### 2.3 Alertas Internos ✅
+- Alertas configuráveis para respostas 5xx e latência elevada
+- Indicador visual `!` no status code quando alerta dispara
+- Tecla `a` abre manager para toggle de regras
+- Configuração persistida em `alerts.json`
 
 ### 2.4 Mapeamentos de Tráfego
 
@@ -116,8 +117,9 @@ Structs implementadas:
 - `Flow` - descreve temporização, estados e payloads
 - `Request` - método, URL, headers, body
 - `Response` - status, headers, body
-- `FilterState` - tipo de filtro e query
-- `MapRule` - padrão, destino, tipo (local/remote), enabled
+- `FilterState` - tipo de filtro, query, starred IDs
+- `AlertRule` - tipo (status_code/latency), valor, enabled
+- `MapRule` - padrão, destino, tipo (local/remote), enabled, priority
 - `HostPattern` - padrão de whitelist com estado enabled
 
 ### 3.2 ViewModel
@@ -248,36 +250,38 @@ sudo security add-trusted-cert -d -r trustRoot \
 
 #### ViewModel (`internal/viewmodel/`)
 - Medeia entre FlowStore, MapRuleStore e UI
-- Aplica filtros (Todos/Whitelist/Search) no slice de flows
+- Aplica filtros (All/Whitelist/Starred/Custom) no slice de flows
 - Publica eventos de atualização via channel
+- Ficheiros: `viewmodel.go` (core), `format.go`, `whitelist.go`, `maprules.go`, `alerts.go`, `replay.go`, `export.go`
 
 #### View (`internal/ui/`)
 - `app.go` - coordenação principal e keybindings
 - `layout.go` - grid layout com painéis
 - `requests.go` - lista de requests
 - `detail.go` - painel de detalhe
+- `keybindings.go` - definição de ações e teclas
 - `whichkey.go` - overlay de ajuda
 - `whitelist.go` - manager de whitelist
 - `maplocal.go` - manager de map local
 - `mapremote.go` - manager de map remote
+- `alerts.go` - manager de alertas
+- `filepicker.go` - file picker com autocomplete para import HAR
 
-### 5.4 Persistência (Fase 2 - parcialmente implementado)
+### 5.4 Persistência ✅
 
-**Diretório de configuração:** `~/.config/proxy-tui/`
+**Diretório de configuração:** `~/.proxy-tui/`
 
 ```
-~/.config/proxy-tui/
-├── ca/
-│   ├── ca.key          # Chave privada CA
-│   └── ca.crt          # Certificado CA
+~/.proxy-tui/
+├── ca.crt              # Certificado CA
+├── ca.key              # Chave privada CA
+├── whitelist.jsonc     # Padrões de whitelist
+├── maplocal.jsonc      # Regras map local
+├── mapremote.jsonc     # Regras map remote
+├── alerts.json         # Regras de alertas
 └── mappings/           # Ficheiros mock JSONC
     └── *.jsonc
 ```
-
-**TODO Fase 2:**
-- Persistir regras de mapping em `maps.json`
-- Persistir whitelist
-- Ficheiro de configuração `config.yml`
 
 ---
 
@@ -305,9 +309,19 @@ sudo security add-trusted-cert -d -r trustRoot \
 | `R` | Map Remote Manager |
 | `w` | Adicionar à Whitelist |
 | `W` | Whitelist Manager |
+| `s` | Star/unstar flow selecionado |
+| `S` | Star todos os flows listados |
+| `p` | Pause/resume captura (bypass total) |
+| `.` | Replay request selecionado |
+| `x` | Copiar request como cURL |
+| `e` | Exportar flow selecionado como HAR |
+| `E` | Exportar todos os flows como HAR |
+| `i` | Importar ficheiro HAR |
+| `a` | Configurações de alertas |
 | `/` | Pesquisar/Filtrar |
 | `1` | Filtro: Todos |
 | `2` | Filtro: Whitelist |
+| `3` | Filtro: Starred |
 | `c` | Limpar flows |
 | `C` | Limpar whitelist |
 
@@ -325,6 +339,14 @@ sudo security add-trusted-cert -d -r trustRoot \
 | `L` | Map Local Manager |
 | `r` | Map to Remote |
 | `R` | Map Remote Manager |
+| `s` | Star/unstar flow selecionado |
+| `S` | Star todos os flows listados |
+| `p` | Pause/resume captura |
+| `.` | Replay request |
+| `x` | Copiar como cURL |
+| `e` | Exportar como HAR |
+| `E` | Exportar todos como HAR |
+| `3` | Filtro: Starred |
 
 ### 6.4 Gestão de Mappings/Whitelist (dentro dos managers)
 | Tecla | Ação |
@@ -350,7 +372,7 @@ sudo security add-trusted-cert -d -r trustRoot \
 ### 7.1 Layout Principal
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│ 192.168.1.100:9090 │ 1:All  2:Whitelist  /:filter                       │
+│ 192.168.1.100:9090 │ 1:All  2:Whitelist  3:Starred  /:filter             │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ Requests                    │ ► Request                                 │
 │                             │ GET https://api.example.com/users         │
@@ -434,9 +456,19 @@ sudo security add-trusted-cert -d -r trustRoot \
 │    R        Map remote manager                             │
 │    w        Add to whitelist                               │
 │    W        Show whitelist                                 │
+│    s        Star/unstar flow                               │
+│    S        Star all listed flows                          │
+│    p        Pause/resume capture                           │
+│    .        Replay request                                 │
+│    x        Copy as cURL                                   │
+│    e        Export selected as HAR                          │
+│    E        Export all as HAR                               │
+│    i        Import HAR file                                │
+│    a        Alert settings                                 │
 │    /        Filter: Custom                                 │
 │    1        Filter: All                                    │
 │    2        Filter: Whitelist                              │
+│    3        Filter: Starred                                │
 │    c        Clear flows                                    │
 │                                                            │
 │  Press ? to close                                          │
@@ -455,19 +487,20 @@ sudo security add-trusted-cert -d -r trustRoot \
 5. ✅ Whitelist com padrões glob
 6. ✅ Filtros (All/Whitelist/Custom)
 
-### Fase 2 - Funcionalidades Avançadas (em progresso)
-1. ⬜ Persistência de mappings e whitelist
-2. ⬜ Replay de requests
-3. ⬜ Export de flows (HAR, cURL)
-4. ⬜ Alertas para 5xx e latência elevada
-5. ⬜ Hit counters nos mappings
-6. ⬜ Ficheiro de configuração
+### Fase 2 - Funcionalidades Avançadas ✅
+1. ✅ Persistência de mappings e whitelist (JSONC)
+2. ✅ Replay de requests (tecla `.`)
+3. ✅ Export de flows (HAR com `e`/`E`, cURL com `x`)
+4. ✅ Import de HAR (tecla `i`, file picker com Tab completion)
+5. ✅ Alertas para 5xx e latência elevada (tecla `a`)
+6. ✅ Star flows — marcar e filtrar flows favoritos (`s`/`S`/`3`)
+7. ✅ Pause/Resume — bypass total do proxy (`p`)
+8. ✅ CI com GitHub Actions (vet, test -race, build)
 
 ### Fase 3 - Expansão
-1. ⬜ Distribuição (binários Linux/macOS)
-2. ⬜ Breakpoints (pausar e editar requests)
-3. ⬜ Scripting/plugins
-4. ⬜ WebSocket support
+1. ⬜ Distribuição (binários Linux/macOS, Homebrew)
+2. ⬜ Breakpoints (pausar e editar requests/responses)
+3. ⬜ WebSocket support
 
 ---
 
@@ -533,7 +566,7 @@ go build -o proxy-tui ./cmd/proxy-tui
 - [x] TUI com tview/tcell
 - [x] Layout com dois painéis (requests/detail)
 - [x] Navegação vim-style (j/k/g/G)
-- [x] Filtros (All/Whitelist/Custom)
+- [x] Filtros (All/Whitelist/Custom/Starred)
 - [x] Map to Local com JSONC
 - [x] Map to Remote com reescrita de headers
 - [x] Whitelist com padrões glob
@@ -542,14 +575,22 @@ go build -o proxy-tui ./cmd/proxy-tui
 - [x] Popups modais (bloqueiam clicks externos)
 - [x] Inputs multi-linha para URL patterns
 - [x] Editor integration ($EDITOR)
+- [x] Persistência de configuração (whitelist, mappings, alertas em JSONC/JSON)
+- [x] Replay requests (tecla `.`)
+- [x] Export cURL (tecla `x`, clipboard com wl-copy/pbcopy/xclip/xsel)
+- [x] Export HAR (tecla `e` selecionado, `E` todos)
+- [x] Import HAR (tecla `i`, file picker com Tab completion e filtro em tempo real)
+- [x] Alertas (5xx, latência — tecla `a` para configurar)
+- [x] Star flows (tecla `s`/`S`, filtro `3`, indicador `*` na coluna)
+- [x] Pause/Resume (tecla `p`, bypass total — sem captura, sem maps)
+- [x] Multi-instance via IPC (Unix domain socket)
+- [x] CLI para gestão de regras (--whitelist, --map-local, --map-remote, --list-*, --rm-*)
+- [x] CI com GitHub Actions (vet, test -race, build)
+- [x] Testes abrangentes com `-race` em todos os packages
 
 ### Não Implementado ⬜
-- [ ] Persistência de configuração
-- [ ] Replay requests
-- [ ] Export (HAR, cURL)
-- [ ] Alertas (5xx, latência)
-- [ ] Hit counters
-- [ ] Breakpoints
+- [ ] Distribuição (binários cross-platform, Homebrew)
+- [ ] Breakpoints (pausar e editar requests/responses)
 - [ ] WebSocket support
 
 ---

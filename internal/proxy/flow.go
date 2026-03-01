@@ -4,7 +4,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"proxy-tui/internal/model"
+	"nabu/internal/model"
 )
 
 // FlowStore manages the collection of flows
@@ -14,9 +14,11 @@ type FlowStore struct {
 	mu          sync.RWMutex
 	nextID      uint64
 	maxFlows    int
+	paused      uint32 // atomic: 1 = paused
 	events      chan model.FlowEvent
 	subscribers []chan model.FlowEvent
 	subMu       sync.Mutex
+	onChange    func() // optional callback on Add/Update
 }
 
 // NewFlowStore creates a new flow store
@@ -63,27 +65,56 @@ func (s *FlowStore) emit(event model.FlowEvent) {
 		default:
 		}
 	}
+	// Hold subMu while sending so that Unsubscribe cannot close a channel
+	// mid-send. All sends use select/default, so this cannot block.
 	s.subMu.Lock()
-	subs := make([]chan model.FlowEvent, len(s.subscribers))
-	copy(subs, s.subscribers)
-	s.subMu.Unlock()
-	for _, ch := range subs {
+	for _, ch := range s.subscribers {
 		select {
 		case ch <- event:
 		default:
 		}
 	}
+	s.subMu.Unlock()
 }
 
-// Add adds a new flow and returns its ID
+// OnChange registers a callback that is invoked after Add or Update.
+func (s *FlowStore) OnChange(fn func()) {
+	s.onChange = fn
+}
+
+// SetPaused sets the paused state. When paused, Add and Update are no-ops.
+func (s *FlowStore) SetPaused(paused bool) {
+	if paused {
+		atomic.StoreUint32(&s.paused, 1)
+	} else {
+		atomic.StoreUint32(&s.paused, 0)
+	}
+}
+
+// IsPaused returns whether the store is paused.
+func (s *FlowStore) IsPaused() bool {
+	return atomic.LoadUint32(&s.paused) == 1
+}
+
+// Add adds a new flow and returns its ID. Skipped when paused.
 func (s *FlowStore) Add(flow *model.Flow) model.FlowID {
+	if s.IsPaused() {
+		return 0
+	}
+	return s.addFlow(flow)
+}
+
+// AddDirect adds a flow regardless of pause state (used for imports).
+func (s *FlowStore) AddDirect(flow *model.Flow) model.FlowID {
+	return s.addFlow(flow)
+}
+
+func (s *FlowStore) addFlow(flow *model.Flow) model.FlowID {
 	id := model.FlowID(atomic.AddUint64(&s.nextID, 1))
 	flow.ID = id
 
 	s.mu.Lock()
-	// Evict old flows if at capacity
 	if len(s.flows) >= s.maxFlows {
-		// Remove oldest 10%
 		removeCount := s.maxFlows / 10
 		for i := 0; i < removeCount; i++ {
 			delete(s.flowMap, s.flows[i].ID)
@@ -96,16 +127,27 @@ func (s *FlowStore) Add(flow *model.Flow) model.FlowID {
 
 	s.emit(model.FlowEvent{Type: model.FlowEventRequest, Flow: flow})
 
+	if s.onChange != nil {
+		s.onChange()
+	}
+
 	return id
 }
 
 // Update updates an existing flow (e.g., with response)
 func (s *FlowStore) Update(flow *model.Flow, eventType model.FlowEventType) {
+	if s.IsPaused() {
+		return
+	}
 	s.mu.Lock()
 	s.flowMap[flow.ID] = flow
 	s.mu.Unlock()
 
 	s.emit(model.FlowEvent{Type: eventType, Flow: flow})
+
+	if s.onChange != nil {
+		s.onChange()
+	}
 }
 
 // Get retrieves a flow by ID

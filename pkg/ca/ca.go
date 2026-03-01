@@ -12,17 +12,22 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sync"
 	"time"
 )
 
 const (
-	defaultCADir  = ".proxy-tui"
+	defaultCADir  = ".nabu"
 	caCertFile    = "ca.crt"
 	caKeyFile     = "ca.key"
 	certCacheSize = 1000
 )
+
+// caDirOverride, when non-empty, is returned by getCADir instead of
+// the default ~/. Tests in this package set it directly.
+var caDirOverride string
 
 // CA manages certificate generation and signing
 type CA struct {
@@ -70,12 +75,28 @@ func Generate() (*CA, error) {
 		return nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
 
+	// Include hostname in the CA name for identification
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "unknown"
+	}
+	username := ""
+	if u, err := user.Current(); err == nil {
+		username = u.Username
+	}
+	cnParts := "Nabu CA"
+	if username != "" && hostname != "" {
+		cnParts = fmt.Sprintf("Nabu CA (%s@%s)", username, hostname)
+	} else if hostname != "" {
+		cnParts = fmt.Sprintf("Nabu CA (%s)", hostname)
+	}
+
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization:       []string{"Proxy TUI"},
+			Organization:       []string{"Nabu"},
 			OrganizationalUnit: []string{"Development"},
-			CommonName:         "Proxy TUI CA",
+			CommonName:         cnParts,
 		},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().AddDate(10, 0, 0), // Valid for 10 years
@@ -185,7 +206,7 @@ func (ca *CA) GenerateCert(host string) (*tls.Certificate, error) {
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"Proxy TUI"},
+			Organization: []string{"Nabu"},
 			CommonName:   host,
 		},
 		NotBefore:   time.Now().Add(-time.Hour),
@@ -245,6 +266,9 @@ func (ca *CA) Fingerprint() string {
 
 // getCADir returns the directory for storing CA files
 func getCADir() string {
+	if caDirOverride != "" {
+		return caDirOverride
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return defaultCADir
