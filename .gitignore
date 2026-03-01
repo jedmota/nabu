@@ -43,7 +43,7 @@ vendor/
 Thumbs.db
 
 # Debug
-debug
+/debug
 *.log
 
 # Local config (if sensitive)
