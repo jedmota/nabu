@@ -5,7 +5,7 @@
 *.so
 *.dylib
 bin/
-nabu
+/nabu
 
 # Archives
 *.tar.gz
@@ -43,7 +43,7 @@ vendor/
 Thumbs.db
 
 # Debug
-debug
+/debug
 *.log
 
 # Local config (if sensitive)
