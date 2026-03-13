@@ -58,8 +58,9 @@ type Model struct {
 	showHelp bool
 
 	// Chord tracking
-	lastKeyRune rune
-	lastKeyTime time.Time
+	lastKeyRune  rune
+	lastKeyTime  time.Time
+	pendingCount int // vim-style count prefix for motion keys
 }
 
 // NewModel creates a new root model.
@@ -166,6 +167,23 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.lastKeyRune = 0
 
+	// Accumulate digit keys as count prefix (1-9 start, 0-9 continue)
+	if key >= "1" && key <= "9" && m.pendingCount == 0 {
+		m.pendingCount = int(key[0] - '0')
+		return m, nil
+	}
+	if key >= "0" && key <= "9" && m.pendingCount > 0 {
+		m.pendingCount = m.pendingCount*10 + int(key[0]-'0')
+		if m.pendingCount > 999 {
+			m.pendingCount = 999
+		}
+		return m, nil
+	}
+
+	// Consume pending count for motion keys, reset for anything else
+	count := m.pendingCount
+	m.pendingCount = 0
+
 	// Handle G (go to bottom)
 	if key == "G" {
 		if m.focusedPanel == 0 {
@@ -192,24 +210,34 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Context-dependent keys
 	switch key {
 	case "j", "down":
+		n := max(count, 1)
 		if m.focusedPanel == 0 {
-			m.requestList.MoveDown()
+			for range n {
+				m.requestList.MoveDown()
+			}
 			if flow := m.vm.GetSelectedFlow(); flow != nil {
 				m.detailView.SetFlow(flow)
 			}
 		} else {
-			m.detailView.ScrollDown()
+			for range n {
+				m.detailView.ScrollDown()
+			}
 		}
 		return m, nil
 
 	case "k", "up":
+		n := max(count, 1)
 		if m.focusedPanel == 0 {
-			m.requestList.MoveUp()
+			for range n {
+				m.requestList.MoveUp()
+			}
 			if flow := m.vm.GetSelectedFlow(); flow != nil {
 				m.detailView.SetFlow(flow)
 			}
 		} else {
-			m.detailView.ScrollUp()
+			for range n {
+				m.detailView.ScrollUp()
+			}
 		}
 		return m, nil
 
