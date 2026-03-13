@@ -12,14 +12,15 @@ import (
 
 // Column widths (fixed columns)
 const (
-	colTimeWidth   = 12 // HH:MM:SS.mmm
-	colMethodWidth = 8  // DELETE/TUNNEL is longest
-	colHostWidth   = 25
-	colStatusWidth = 5
-	colDurWidth    = 10
-	colStarWidth   = 1
-	colMapWidth    = 1
-	colPadding     = 7 // spaces between columns
+	colLineNumWidth = 3  // relative line numbers
+	colTimeWidth    = 12 // HH:MM:SS.mmm
+	colMethodWidth  = 8  // DELETE/TUNNEL is longest
+	colHostWidth    = 25
+	colStatusWidth  = 5
+	colDurWidth     = 7
+	colStarWidth    = 1
+	colMapWidth     = 1
+	colPadding      = 8 // spaces between columns (includes line num separator)
 )
 
 // RequestListModel manages the requests table rendering.
@@ -194,7 +195,7 @@ func (r *RequestListModel) View() string {
 
 	// Calculate path column width (account for cursor indicator + left/right padding)
 	pad := " "
-	fixedWidth := 2 + 2 + colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth + colStarWidth + colMapWidth + colPadding
+	fixedWidth := 2 + 2 + colLineNumWidth + colTimeWidth + colMethodWidth + colHostWidth + colStatusWidth + colDurWidth + colStarWidth + colMapWidth + colPadding
 	pathWidth := r.width - fixedWidth
 	if pathWidth < 10 {
 		pathWidth = 10
@@ -272,7 +273,13 @@ func (r *RequestListModel) View() string {
 			mapped = "R"
 		}
 
-		row := renderRow(timestamp, method, host, path, status, duration, star, mapped, pathWidth, flow, selected)
+		// Relative line number: absolute on cursor, distance on others
+		relNum := rowIdx - r.cursor
+		if relNum < 0 {
+			relNum = -relNum
+		}
+
+		row := renderRow(timestamp, method, host, path, status, duration, star, mapped, pathWidth, flow, selected, rowIdx, relNum)
 		sb.WriteString(pad + row)
 		if i < vis-1 {
 			sb.WriteByte('\n')
@@ -284,6 +291,7 @@ func (r *RequestListModel) View() string {
 
 func renderHeader(pathWidth int) string {
 	cursor := "  " // cursor column placeholder
+	lineNum := padOrTrunc("#", colLineNumWidth)
 	timestamp := padOrTrunc("Time", colTimeWidth)
 	method := padOrTrunc("Method", colMethodWidth)
 	host := padOrTrunc("Host", colHostWidth)
@@ -293,11 +301,11 @@ func renderHeader(pathWidth int) string {
 	star := padOrTrunc("*", colStarWidth)
 	mapped := padOrTrunc("M", colMapWidth)
 
-	line := cursor + timestamp + " " + method + " " + host + " " + path + " " + status + " " + dur + " " + star + " " + mapped
+	line := cursor + lineNum + " " + timestamp + " " + method + " " + host + " " + path + " " + status + " " + dur + " " + star + " " + mapped
 	return headerStyle.Render(line)
 }
 
-func renderRow(timestamp, method, host, path, status, dur, star, mapped string, pathWidth int, flow *model.Flow, selected bool) string {
+func renderRow(timestamp, method, host, path, status, dur, star, mapped string, pathWidth int, flow *model.Flow, selected bool, absLine, relLine int) string {
 	// Truncate columns to fit
 	timestamp = padOrTrunc(timestamp, colTimeWidth)
 	method = padOrTrunc(method, colMethodWidth)
@@ -316,46 +324,89 @@ func renderRow(timestamp, method, host, path, status, dur, star, mapped string, 
 
 	tunneled := flow != nil && flow.Tunneled
 
-	timeStr := lipgloss.NewStyle().Foreground(colorMuted).Render(timestamp)
-	methodStr := methodStyle(strings.TrimSpace(method)).Render(method)
+	// Helper to apply selected background to a style
+	bg := func(s lipgloss.Style) lipgloss.Style {
+		if selected {
+			return s.Background(colorSelectedBg)
+		}
+		return s
+	}
+
+	// Relative line number: absolute (1-indexed, right-aligned) on selected,
+	// relative distance (left-aligned) on others
+	var lineNumStr string
+	if selected {
+		lineNumStr = bg(lipgloss.NewStyle().Foreground(accentColor()).Bold(true)).
+			Render(padLeftNum(absLine+1, colLineNumWidth))
+	} else {
+		lineNumStr = bg(lipgloss.NewStyle().Foreground(colorMuted)).
+			Render(padRightNum(relLine, colLineNumWidth))
+	}
+
+	timeStr := bg(lipgloss.NewStyle().Foreground(colorMuted)).Render(timestamp)
+	methodStr := bg(methodStyle(strings.TrimSpace(method))).Render(method)
 
 	hostColor := colorWhite
 	if tunneled {
 		hostColor = colorMuted
 	}
-	hostStr := lipgloss.NewStyle().Foreground(hostColor).Render(host)
+	hostStr := bg(lipgloss.NewStyle().Foreground(hostColor)).Render(host)
 
 	pathColor := colorSubtle
 	if tunneled {
 		pathColor = colorMuted
 	}
-	pathStr := lipgloss.NewStyle().Foreground(pathColor).Render(path)
+	pathStr := bg(lipgloss.NewStyle().Foreground(pathColor)).Render(path)
 
 	var statusStr string
 	if flow != nil && flow.Response != nil {
-		statusStr = statusStyle(flow.Response.StatusCode).Render(status)
+		statusStr = bg(statusStyle(flow.Response.StatusCode)).Render(status)
 	} else if flow != nil && flow.Error != nil {
-		statusStr = lipgloss.NewStyle().Foreground(colorRed).Render(status)
+		statusStr = bg(lipgloss.NewStyle().Foreground(colorRed)).Render(status)
 	} else {
-		statusStr = lipgloss.NewStyle().Foreground(colorMuted).Render(status)
+		statusStr = bg(lipgloss.NewStyle().Foreground(colorMuted)).Render(status)
 	}
 
-	durStr := lipgloss.NewStyle().Foreground(colorMuted).Render(dur)
-	starStr := lipgloss.NewStyle().Foreground(colorStar).Render(star)
+	durStr := bg(lipgloss.NewStyle().Foreground(colorMuted)).Render(dur)
+	starStr := bg(lipgloss.NewStyle().Foreground(colorStar)).Render(star)
 
 	var mappedStr string
 	switch {
 	case flow != nil && flow.Mapped == "local":
-		mappedStr = mappedLocalBadge.Render(mapped)
+		mappedStr = bg(mappedLocalBadge).Render(mapped)
 	case flow != nil && flow.Mapped == "remote":
-		mappedStr = mappedRemoteBadge.Render(mapped)
+		mappedStr = bg(mappedRemoteBadge).Render(mapped)
 	default:
-		mappedStr = lipgloss.NewStyle().Foreground(colorMuted).Render(mapped)
+		mappedStr = bg(lipgloss.NewStyle().Foreground(colorMuted)).Render(mapped)
 	}
 
-	line := cursor + timeStr + " " + methodStr + " " + hostStr + " " + pathStr + " " + statusStr + " " + durStr + " " + starStr + " " + mappedStr
+	// Space separator with background for selected rows
+	sep := " "
+	if selected {
+		sep = lipgloss.NewStyle().Background(colorSelectedBg).Render(" ")
+	}
+
+	line := cursor + lineNumStr + sep + timeStr + sep + methodStr + sep + hostStr + sep + pathStr + sep + statusStr + sep + durStr + sep + starStr + sep + mappedStr
 
 	return line
+}
+
+// padLeftNum right-aligns a number in the given width.
+func padLeftNum(n, width int) string {
+	s := fmt.Sprintf("%d", n)
+	if len(s) >= width {
+		return s[:width]
+	}
+	return strings.Repeat(" ", width-len(s)) + s
+}
+
+// padRightNum left-aligns a number in the given width.
+func padRightNum(n, width int) string {
+	s := fmt.Sprintf("%d", n)
+	if len(s) >= width {
+		return s[:width]
+	}
+	return s + strings.Repeat(" ", width-len(s))
 }
 
 func padOrTrunc(s string, width int) string {
