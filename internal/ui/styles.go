@@ -76,8 +76,9 @@ var (
 	colorSubtle  = lipgloss.AdaptiveColor{Light: "#6B7280", Dark: "#9CA3AF"}
 	colorMuted   = lipgloss.AdaptiveColor{Light: "#9CA3AF", Dark: "#6B7280"}
 	colorDim     = lipgloss.AdaptiveColor{Light: "#D1D5DB", Dark: "#374151"}
-	colorSurface = lipgloss.AdaptiveColor{Light: "#F3F4F6", Dark: "#1F2937"}
-	colorOverlay = lipgloss.AdaptiveColor{Light: "#E5E7EB", Dark: "#111827"}
+	colorSurface    = lipgloss.AdaptiveColor{Light: "#F3F4F6", Dark: "#1F2937"}
+	colorOverlay    = lipgloss.AdaptiveColor{Light: "#E5E7EB", Dark: "#111827"}
+	colorSelectedBg = lipgloss.AdaptiveColor{Light: "#E8E8EE", Dark: "#1A1F2E"}
 )
 
 // Semantic colors (constant)

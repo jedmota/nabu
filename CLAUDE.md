@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+ALWAYS start in plan mode
+
 ## Project Overview
 
 nabu is a terminal-based HTTP/HTTPS debugging proxy (inspired by Proxyman). It intercepts traffic via MITM, displays requests/responses in a TUI, and supports traffic manipulation (map-local, map-remote), HAR import/export, request replay, and multi-instance viewing via IPC.
